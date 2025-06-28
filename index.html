@@ -1,557 +1,374 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amazon出荷通知フォーマット生成ツール</title>
-    <style>
-        * {
-            box-sizing: border-box;
-        }
+import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            background-color: #ffffff;
-            color: #333;
-            line-height: 1.6;
-        }
+const ShippingNotificationApp = () => {
+  const [csvData, setCsvData] = useState([]);
+  const [templateData, setTemplateData] = useState([]);
+  const [carrierList, setCarrierList] = useState([]);
+  const [processedData, setProcessedData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [templateLoaded, setTemplateLoaded] = useState(false);
 
-        h1 {
-            text-align: center;
-            margin-bottom: 10px;
-            font-size: 24px;
-            color: #333;
-        }
+  // コンポーネント初期化時にテンプレートファイルを自動読み込み
+  React.useEffect(() => {
+    loadTemplateFile();
+  }, []);
 
-        .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 40px;
-            font-size: 16px;
-        }
+  // テンプレートファイルを自動読み込み
+  const loadTemplateFile = async () => {
+    try {
+      const response = await fetch('./Flat.File.ShippingConfirmation.jp.xls');
+      if (!response.ok) {
+        console.warn('テンプレートファイルが見つかりません');
+        return;
+      }
+      
+      const fileContent = await response.arrayBuffer();
+      const workbook = XLSX.read(fileContent, { type: 'array' });
+      
+      // テンプレートシートのヘッダー取得
+      const templateSheet = workbook.Sheets['出荷通知テンプレート_Template'];
+      const templateJson = XLSX.utils.sheet_to_json(templateSheet, { header: 1 });
+      setTemplateData(templateJson);
+      
+      // 配送業者リスト取得
+      const carrierSheet = workbook.Sheets['配送業者名推奨値'];
+      const carrierJson = XLSX.utils.sheet_to_json(carrierSheet, { header: 1 });
+      setCarrierList(carrierJson);
+      
+      setTemplateLoaded(true);
+      console.log('テンプレートファイル自動読み込み完了');
+    } catch (error) {
+      console.warn('テンプレートファイルの自動読み込みに失敗しました:', error.message);
+    }
+  };
+  const carrierCodeMap = {
+    'ヤマト運輸': 'YAMATO',
+    'YAMATO': 'YAMATO',
+    '日本郵便': 'Japan Post',
+    'Japan Post': 'Japan Post',
+    '佐川急便': 'SAGAWA',
+    'SAGAWA': 'SAGAWA',
+    'フェデックス': 'FEDEX',
+    'FEDEX': 'FEDEX'
+  };
 
-        .form-section {
-            margin-bottom: 30px;
-        }
+  // CSVファイルを読み込む（Amazonダウンロードファイル）
+  const handleCsvUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+    setLoading(true);
+    try {
+      const fileContent = await file.text();
+      const result = Papa.parse(fileContent, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: 'UTF-8'
+      });
+      
+      setCsvData(result.data);
+      console.log('Amazonダウンロードファイル読み込み完了:', result.data.length, '件');
+    } catch (error) {
+      alert('CSVファイルの読み込みに失敗しました: ' + error.message);
+    }
+    setLoading(false);
+  };
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #333;
-        }
+  // テンプレートファイルを手動で読み込む関数は削除
+  // handleTemplateUpload関数を削除
 
-        .required {
-            color: #d73527;
-        }
+  // データを処理して出荷通知ファイルを生成
+  const processData = () => {
+    if (csvData.length === 0) {
+      alert('CSVファイルを先に読み込んでください');
+      return;
+    }
 
-        input[type="file"] {
-            width: 100%;
-            padding: 12px;
-            border: 2px dashed #ddd;
-            border-radius: 6px;
-            background-color: #fafafa;
-            cursor: pointer;
-            font-size: 14px;
-        }
+    setLoading(true);
+    
+    const processed = csvData.map(row => {
+      // CSVから必要なデータを抽出（列名は推測）
+      const orderNumber = extractOrderNumber(row);
+      const shipDate = extractShipDate(row);
+      const carrierInfo = extractCarrierInfo(row);
+      const trackingNumber = extractTrackingNumber(row);
 
-        input[type="file"]:hover {
-            border-color: #0066cc;
-            background-color: #f0f8ff;
-        }
+      return {
+        'order-id': orderNumber,
+        'order-item-id': '',
+        'quantity': '',
+        'ship-date': formatShipDate(shipDate),
+        'carrier-code': getCarrierCode(carrierInfo),
+        'carrier-name': getCarrierName(carrierInfo),
+        'tracking-number': trackingNumber,
+        'ship-method': '',
+        'cod-collection-method': '',
+        'transparency_code': '',
+        'ship_from_address_name': '',
+        'ship_from_address_line1': '',
+        'ship_from_address_line2': '',
+        'ship_from_address_line3': '',
+        'ship_from_address_city': '',
+        'ship_from_address_county': '',
+        'ship_from_address_state_or_region': '',
+        'ship_from_address_postalcode': '',
+        'ship_from_address_countrycode': ''
+      };
+    });
 
-        .btn {
-            background-color: #0066cc;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 500;
-            width: 100%;
-            margin: 10px 0;
-            transition: background-color 0.3s;
-        }
+    setProcessedData(processed);
+    setLoading(false);
+  };
 
-        .btn:hover:not(:disabled) {
-            background-color: #0052a3;
-        }
+  // 注文番号を抽出（Amazon形式: 123-1234567-1234567）
+  const extractOrderNumber = (row) => {
+    // CSVの列から注文番号らしきものを探す
+    const values = Object.values(row);
+    for (const value of values) {
+      if (typeof value === 'string' && /^\d{3}-\d{7}-\d{7}$/.test(value)) {
+        return value;
+      }
+    }
+    return '';
+  };
 
-        .btn:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
-        }
+  // 出荷日を抽出
+  const extractShipDate = (row) => {
+    const values = Object.values(row);
+    for (const value of values) {
+      if (typeof value === 'string' && value.includes('/')) {
+        return value;
+      }
+    }
+    return new Date().toISOString().split('T')[0];
+  };
 
-        .btn.success {
-            background-color: #28a745;
-        }
+  // 配送業者情報を抽出
+  const extractCarrierInfo = (row) => {
+    const values = Object.values(row);
+    for (const value of values) {
+      if (typeof value === 'string' && (
+        value.includes('ヤマト') || 
+        value.includes('佐川') || 
+        value.includes('郵便') ||
+        value.includes('YAMATO') ||
+        value.includes('SAGAWA')
+      )) {
+        return value;
+      }
+    }
+    return 'YAMATO'; // デフォルト
+  };
 
-        .btn.success:hover {
-            background-color: #218838;
-        }
+  // 追跡番号を抽出
+  const extractTrackingNumber = (row) => {
+    const values = Object.values(row);
+    for (const value of values) {
+      if (typeof value === 'string' && /^\d{10,15}$/.test(value)) {
+        return value;
+      }
+    }
+    return '';
+  };
 
-        .status {
-            padding: 12px;
-            border-radius: 6px;
-            margin: 15px 0;
-            font-size: 14px;
-        }
+  // 出荷日をフォーマット
+  const formatShipDate = (dateStr) => {
+    if (!dateStr) return new Date().toISOString().split('T')[0];
+    
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+    return dateStr;
+  };
 
-        .status.success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
+  // 配送業者コードを取得
+  const getCarrierCode = (carrierInfo) => {
+    return carrierCodeMap[carrierInfo] || 'YAMATO';
+  };
 
-        .status.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
+  // 配送業者名を取得
+  const getCarrierName = (carrierInfo) => {
+    if (carrierInfo.includes('ヤマト') || carrierInfo === 'YAMATO') return 'ヤマト運輸';
+    if (carrierInfo.includes('佐川') || carrierInfo === 'SAGAWA') return '佐川急便';
+    if (carrierInfo.includes('郵便') || carrierInfo === 'Japan Post') return '日本郵便';
+    return 'ヤマト運輸';
+  };
 
-        .status.info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
+  // TXTファイルをダウンロード
+  const downloadTxt = () => {
+    if (processedData.length === 0) {
+      alert('データを先に処理してください');
+      return;
+    }
 
-        .processing {
-            text-align: center;
-            padding: 20px;
-            display: none;
-        }
+    // ヘッダー行を作成
+    const headers = [
+      'TemplateType=OrderFulfillment',
+      'Version=2011.1102',
+      'この行はAmazonが使用しますので変更や削除しないでください。'
+    ];
 
-        .preview-section {
-            margin-top: 30px;
-            display: none;
-        }
+    const columnHeaders = [
+      '注文番号', '注文商品番号', '出荷数', '出荷日', '配送業者コード', '配送業者名',
+      'お問い合わせ伝票番号', '配送方法', '代金引換', '製品が透明に登録されている場合の製品の透明コード。',
+      '出荷元住所-名称', '出荷元住所-行 1', '出荷元住所-行 2', '出荷元住所-行 3',
+      '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', '出荷元住所-郵便番号',
+      '出荷元住所-国コード'
+    ];
 
-        .preview-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            font-size: 12px;
-        }
+    const columnIds = [
+      'order-id', 'order-item-id', 'quantity', 'ship-date', 'carrier-code', 'carrier-name',
+      'tracking-number', 'ship-method', 'cod-collection-method', 'transparency_code',
+      'ship_from_address_name', 'ship_from_address_line1', 'ship_from_address_line2',
+      'ship_from_address_line3', 'ship_from_address_city', 'ship_from_address_county',
+      'ship_from_address_state_or_region', 'ship_from_address_postalcode', 'ship_from_address_countrycode'
+    ];
 
-        .preview-table th, .preview-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
+    // データ行を作成
+    const dataRows = processedData.map(row => 
+      columnIds.map(id => row[id] || '').join('\t')
+    );
 
-        .preview-table th {
-            background-color: #f8f9fa;
-            font-weight: 600;
-        }
+    // 全ての行を結合
+    const content = [
+      headers.join('\t'),
+      columnHeaders.join('\t'),
+      columnIds.join('\t'),
+      ...dataRows
+    ].join('\n');
 
-        .instructions {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 6px;
-            margin-top: 30px;
-            border-left: 4px solid #0066cc;
-        }
+    // ファイルをダウンロード
+    const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shipping_notification_${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-        .instructions h3 {
-            margin-top: 0;
-            color: #333;
-        }
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-gray-900 mb-8">
+          Amazon出荷通知処理システム
+        </h1>
 
-        .instructions ol {
-            margin: 10px 0;
-            padding-left: 20px;
-        }
+        <div className="space-y-6">
+          {/* ファイルアップロード */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-semibold mb-4">ファイル読み込み</h2>
+            
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amazon注文レポートCSVファイル
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    id="csv-upload"
+                  />
+                  <label
+                    htmlFor="csv-upload"
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 cursor-pointer"
+                  >
+                    ファイルを選択
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Amazonセラーセントラルからダウンロードした注文レポートをそのままアップロードしてください
+                </p>
+              </div>
+            </div>
+          </div>
 
-        .instructions li {
-            margin-bottom: 5px;
-        }
 
-        select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background-color: #fff;
-            font-size: 14px;
-            cursor: pointer;
-        }
 
-        select:focus {
-            outline: none;
-            border-color: #0066cc;
-            box-shadow: 0 0 5px rgba(0, 102, 204, 0.3);
-        }
+          {/* 処理ボタン */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-semibold mb-4">データ処理</h2>
+            
+            <div className="flex space-x-4">
+              <button
+                onClick={processData}
+                disabled={loading || csvData.length === 0}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {loading ? '処理中...' : 'データ処理実行'}
+              </button>
+              
+              <button
+                onClick={downloadTxt}
+                disabled={processedData.length === 0}
+                className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                TXTファイルダウンロード
+              </button>
+            </div>
+          </div>
 
-        .hidden {
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <h1>Amazon出荷通知フォーマット生成ツール</h1>
-    <p class="subtitle">追跡番号データをAmazon用出荷通知フォーマットに変換</p>
+          {/* プレビュー */}
+          {processedData.length > 0 && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-lg font-semibold mb-4">処理結果プレビュー</h2>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="px-3 py-2 text-left">注文番号</th>
+                      <th className="px-3 py-2 text-left">出荷日</th>
+                      <th className="px-3 py-2 text-left">配送業者コード</th>
+                      <th className="px-3 py-2 text-left">配送業者名</th>
+                      <th className="px-3 py-2 text-left">追跡番号</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processedData.slice(0, 5).map((row, index) => (
+                      <tr key={index} className="border-t">
+                        <td className="px-3 py-2">{row['order-id']}</td>
+                        <td className="px-3 py-2">{row['ship-date']}</td>
+                        <td className="px-3 py-2">{row['carrier-code']}</td>
+                        <td className="px-3 py-2">{row['carrier-name']}</td>
+                        <td className="px-3 py-2">{row['tracking-number']}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {processedData.length > 5 && (
+                  <p className="text-gray-500 text-sm mt-2">
+                    他 {processedData.length - 5} 行...
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
-    <div class="form-section">
-        <div class="form-group">
-            <label for="csvFile">追跡番号データファイル <span class="required">*必須</span></label>
-            <input type="file" id="csvFile" accept=".csv" />
+          {/* 注意事項 */}
+          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+            <h3 className="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
+            <ul className="text-sm text-yellow-700 space-y-1">
+              <li>• Amazonセラーセントラルからダウンロードした注文レポートCSVをそのまま使用してください</li>
+              <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
+              <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
+              <li>• テンプレートファイルは自動で読み込まれます</li>
+            </ul>
+          </div>
         </div>
-        
-        <div class="form-group">
-            <label for="carrierSelect">配送業者</label>
-            <select id="carrierSelect">
-                <option value="auto">自動判定（CSVから）</option>
-                <option value="ヤマト運輸">ヤマト運輸</option>
-                <option value="佐川急便">佐川急便</option>
-                <option value="日本郵便">日本郵便</option>
-                <option value="福山通運">福山通運</option>
-                <option value="西濃運輸">西濃運輸</option>
-            </select>
-        </div>
-        
-        <button class="btn" id="convertBtn" onclick="processFile()" disabled>
-            データを変換してプレビュー
-        </button>
-        
-        <div class="processing" id="processing">
-            <p>処理中...</p>
-        </div>
-        
-        <div id="statusArea"></div>
+      </div>
     </div>
+  );
+};
 
-    <div class="preview-section" id="previewSection">
-        <h3>変換結果プレビュー</h3>
-        <div id="previewContent"></div>
-        <button class="btn success" onclick="downloadCSV()">
-            Amazon用出荷通知ファイルをダウンロード
-        </button>
-        <button class="btn" onclick="resetForm()">
-            最初からやり直す
-        </button>
-    </div>
-
-    <div class="instructions">
-        <h3>使用方法</h3>
-        <ol>
-            <li>追跡番号データファイル(.csv)を選択</li>
-            <li>「データを変換してプレビュー」をクリック</li>
-            <li>変換結果を確認</li>
-            <li>「Amazon用出荷通知ファイルをダウンロード」でファイル取得</li>
-        </ol>
-        <p><strong>※</strong> ファイルは自動でフィールドを認識し、Amazon形式に変換されます<br>
-        <strong>※</strong> 配送業者は自動判定され、判定できない場合はヤマト運輸がデフォルト設定されます</p>
-    </div>
-
-    <script>
-        let csvData = [];
-        let csvHeaders = [];
-        let convertedData = [];
-
-        // ファイル選択時の処理
-        document.getElementById('csvFile').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const convertBtn = document.getElementById('convertBtn');
-            
-            if (file) {
-                convertBtn.disabled = false;
-                showStatus('ファイルが選択されました。「データを変換してプレビュー」をクリックしてください。', 'info');
-            } else {
-                convertBtn.disabled = true;
-                clearStatus();
-            }
-        });
-
-        function processFile() {
-            const fileInput = document.getElementById('csvFile');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                showStatus('ファイルを選択してください。', 'error');
-                return;
-            }
-
-            showProcessing(true);
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    // Shift_JISでデコード
-                    const decoder = new TextDecoder('shift_jis');
-                    const arrayBuffer = e.target.result;
-                    const text = decoder.decode(new Uint8Array(arrayBuffer));
-                    
-                    parseAndConvert(text);
-                } catch (error) {
-                    // UTF-8で再試行
-                    const reader2 = new FileReader();
-                    reader2.onload = function(e2) {
-                        parseAndConvert(e2.target.result);
-                    };
-                    reader2.readAsText(file, 'UTF-8');
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function parseAndConvert(text) {
-            try {
-                // CSVパース
-                const lines = text.split('\n');
-                if (lines.length < 2) {
-                    throw new Error('ファイルの形式が正しくありません。');
-                }
-
-                // ヘッダー行の解析
-                csvHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-                
-                // データ行の解析
-                csvData = [];
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (line) {
-                        const values = parseCSVLine(line);
-                        if (values.length > 0) {
-                            const row = {};
-                            csvHeaders.forEach((header, index) => {
-                                row[header] = values[index] || '';
-                            });
-                            csvData.push(row);
-                        }
-                    }
-                }
-
-                // 自動マッピングと変換
-                const mapping = autoMapFields();
-                convertData(mapping);
-                
-            } catch (error) {
-                showProcessing(false);
-                showStatus(`エラー: ${error.message}`, 'error');
-            }
-        }
-
-        function parseCSVLine(line) {
-            const values = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    values.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            values.push(current.trim());
-            return values;
-        }
-
-        function autoMapFields() {
-            const mappingRules = {
-                'orderIdField': ['注文番号', '注文ID', 'お客様管理番号', 'order-id', 'orderid'],
-                'trackingNumberField': ['伝票番号', '追跡番号', 'お問い合わせ伝票番号', 'tracking-number'],
-                'shipDateField': ['出荷日', '出荷予定日', '発送日', 'ship-date'],
-                'carrierNameField': ['配送業者', '配送業者名', '運送会社', 'carrier-name'],
-                'shipMethodField': ['送り状種類', '配送方法', '発送方法', 'ship-method']
-            };
-
-            const mapping = {};
-
-            Object.keys(mappingRules).forEach(fieldId => {
-                const rules = mappingRules[fieldId];
-                
-                // 完全一致を最初に試す
-                for (const rule of rules) {
-                    const exactMatch = csvHeaders.find(header => 
-                        header.toLowerCase() === rule.toLowerCase()
-                    );
-                    if (exactMatch) {
-                        mapping[fieldId] = exactMatch;
-                        break;
-                    }
-                }
-                
-                // 完全一致がない場合は部分一致を試す
-                if (!mapping[fieldId]) {
-                    for (const rule of rules) {
-                        const partialMatch = csvHeaders.find(header => 
-                            header.toLowerCase().includes(rule.toLowerCase()) ||
-                            rule.toLowerCase().includes(header.toLowerCase())
-                        );
-                        if (partialMatch) {
-                            mapping[fieldId] = partialMatch;
-                            break;
-                        }
-                    }
-                }
-            });
-
-            return mapping;
-        }
-
-        function convertData(mapping) {
-            if (csvData.length === 0) {
-                throw new Error('データが見つかりません。');
-            }
-
-            const today = new Date().toISOString().split('T')[0];
-            const selectedCarrier = document.getElementById('carrierSelect').value;
-            convertedData = [];
-
-            csvData.forEach(row => {
-                let carrierName = 'ヤマト運輸'; // デフォルト
-                
-                if (selectedCarrier === 'auto') {
-                    // CSVから自動判定
-                    carrierName = mapping.carrierNameField ? row[mapping.carrierNameField] : 'ヤマト運輸';
-                } else {
-                    // 選択された配送業者を使用
-                    carrierName = selectedCarrier;
-                }
-
-                const convertedRow = {
-                    'order-id': mapping.orderIdField ? row[mapping.orderIdField] : '',
-                    'order-item-id': '1',
-                    'quantity': '1',
-                    'ship-date': formatDate(mapping.shipDateField ? row[mapping.shipDateField] : today),
-                    'carrier-code': '',
-                    'carrier-name': carrierName,
-                    'tracking-number': mapping.trackingNumberField ? row[mapping.trackingNumberField] : '',
-                    'ship-method': mapping.shipMethodField ? row[mapping.shipMethodField] : 'Standard',
-                    'cod-collection-method': '',
-                    'transparency_code': '',
-                    'ship_from_address_name': '',
-                    'ship_from_address_line1': '',
-                    'ship_from_address_line2': '',
-                    'ship_from_address_line3': '',
-                    'ship_from_address_city': '',
-                    'ship_from_address_county': '',
-                    'ship_from_address_state_or_region': '',
-                    'ship_from_address_postalcode': '',
-                    'ship_from_address_countrycode': 'JP'
-                };
-                convertedData.push(convertedRow);
-            });
-
-            showProcessing(false);
-            showPreview();
-            showStatus(`${convertedData.length}行のデータを正常に変換しました。`, 'success');
-        }
-
-        function formatDate(dateStr) {
-            if (!dateStr) return new Date().toISOString().split('T')[0];
-            
-            const date = new Date(dateStr.replace(/\//g, '-'));
-            if (isNaN(date.getTime())) return dateStr;
-            
-            return date.toISOString().split('T')[0];
-        }
-
-        function showPreview() {
-            const previewSection = document.getElementById('previewSection');
-            const previewContent = document.getElementById('previewContent');
-            
-            if (convertedData.length === 0) return;
-
-            let html = '<table class="preview-table"><thead><tr>';
-            
-            const headers = Object.keys(convertedData[0]);
-            headers.forEach(header => {
-                html += `<th>${header}</th>`;
-            });
-            html += '</tr></thead><tbody>';
-
-            const previewRows = convertedData.slice(0, 3);
-            previewRows.forEach(row => {
-                html += '<tr>';
-                headers.forEach(header => {
-                    html += `<td>${row[header] || ''}</td>`;
-                });
-                html += '</tr>';
-            });
-
-            html += '</tbody></table>';
-            
-            if (convertedData.length > 3) {
-                html += `<p style="margin-top: 10px; color: #666; font-size: 14px;">※ ${convertedData.length}行中の最初の3行を表示</p>`;
-            }
-
-            previewContent.innerHTML = html;
-            previewSection.style.display = 'block';
-        }
-
-        function downloadCSV() {
-            if (convertedData.length === 0) {
-                showStatus('変換されたデータがありません。', 'error');
-                return;
-            }
-
-            const amazonHeaders = [
-                'TemplateType=OrderFulfillment\tVersion=2011.1102\tこの行はAmazonが使用しますので変更や削除しないでください。'
-            ];
-
-            const headers = Object.keys(convertedData[0]);
-            let csvContent = amazonHeaders.join('\n') + '\n';
-            csvContent += headers.join('\t') + '\n';
-
-            convertedData.forEach(row => {
-                const values = headers.map(header => {
-                    const value = row[header] || '';
-                    return typeof value === 'string' && value.includes('\t') ? `"${value}"` : value;
-                });
-                csvContent += values.join('\t') + '\n';
-            });
-
-            const blob = new Blob([csvContent], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Amazon_Shipping_Confirmation_${new Date().toISOString().split('T')[0]}.txt`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            showStatus('Amazon用出荷通知ファイルをダウンロードしました。', 'success');
-        }
-
-        function resetForm() {
-            document.getElementById('csvFile').value = '';
-            document.getElementById('carrierSelect').value = 'auto';
-            document.getElementById('convertBtn').disabled = true;
-            document.getElementById('previewSection').style.display = 'none';
-            csvData = [];
-            csvHeaders = [];
-            convertedData = [];
-            clearStatus();
-        }
-
-        function showProcessing(show) {
-            document.getElementById('processing').style.display = show ? 'block' : 'none';
-            document.getElementById('convertBtn').disabled = show;
-        }
-
-        function showStatus(message, type) {
-            const statusArea = document.getElementById('statusArea');
-            statusArea.innerHTML = `<div class="status ${type}">${message}</div>`;
-        }
-
-        function clearStatus() {
-            document.getElementById('statusArea').innerHTML = '';
-        }
-    </script>
-</body>
-</html>
+export default ShippingNotificationApp;
