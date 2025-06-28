@@ -1,374 +1,403 @@
-import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
-import Papa from 'papaparse';
-
-const ShippingNotificationApp = () => {
-  const [csvData, setCsvData] = useState([]);
-  const [templateData, setTemplateData] = useState([]);
-  const [carrierList, setCarrierList] = useState([]);
-  const [processedData, setProcessedData] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [templateLoaded, setTemplateLoaded] = useState(false);
-
-  // コンポーネント初期化時にテンプレートファイルを自動読み込み
-  React.useEffect(() => {
-    loadTemplateFile();
-  }, []);
-
-  // テンプレートファイルを自動読み込み
-  const loadTemplateFile = async () => {
-    try {
-      const response = await fetch('./Flat.File.ShippingConfirmation.jp.xls');
-      if (!response.ok) {
-        console.warn('テンプレートファイルが見つかりません');
-        return;
-      }
-      
-      const fileContent = await response.arrayBuffer();
-      const workbook = XLSX.read(fileContent, { type: 'array' });
-      
-      // テンプレートシートのヘッダー取得
-      const templateSheet = workbook.Sheets['出荷通知テンプレート_Template'];
-      const templateJson = XLSX.utils.sheet_to_json(templateSheet, { header: 1 });
-      setTemplateData(templateJson);
-      
-      // 配送業者リスト取得
-      const carrierSheet = workbook.Sheets['配送業者名推奨値'];
-      const carrierJson = XLSX.utils.sheet_to_json(carrierSheet, { header: 1 });
-      setCarrierList(carrierJson);
-      
-      setTemplateLoaded(true);
-      console.log('テンプレートファイル自動読み込み完了');
-    } catch (error) {
-      console.warn('テンプレートファイルの自動読み込みに失敗しました:', error.message);
-    }
-  };
-  const carrierCodeMap = {
-    'ヤマト運輸': 'YAMATO',
-    'YAMATO': 'YAMATO',
-    '日本郵便': 'Japan Post',
-    'Japan Post': 'Japan Post',
-    '佐川急便': 'SAGAWA',
-    'SAGAWA': 'SAGAWA',
-    'フェデックス': 'FEDEX',
-    'FEDEX': 'FEDEX'
-  };
-
-  // CSVファイルを読み込む（Amazonダウンロードファイル）
-  const handleCsvUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setLoading(true);
-    try {
-      const fileContent = await file.text();
-      const result = Papa.parse(fileContent, {
-        header: true,
-        skipEmptyLines: true,
-        encoding: 'UTF-8'
-      });
-      
-      setCsvData(result.data);
-      console.log('Amazonダウンロードファイル読み込み完了:', result.data.length, '件');
-    } catch (error) {
-      alert('CSVファイルの読み込みに失敗しました: ' + error.message);
-    }
-    setLoading(false);
-  };
-
-  // テンプレートファイルを手動で読み込む関数は削除
-  // handleTemplateUpload関数を削除
-
-  // データを処理して出荷通知ファイルを生成
-  const processData = () => {
-    if (csvData.length === 0) {
-      alert('CSVファイルを先に読み込んでください');
-      return;
-    }
-
-    setLoading(true);
-    
-    const processed = csvData.map(row => {
-      // CSVから必要なデータを抽出（列名は推測）
-      const orderNumber = extractOrderNumber(row);
-      const shipDate = extractShipDate(row);
-      const carrierInfo = extractCarrierInfo(row);
-      const trackingNumber = extractTrackingNumber(row);
-
-      return {
-        'order-id': orderNumber,
-        'order-item-id': '',
-        'quantity': '',
-        'ship-date': formatShipDate(shipDate),
-        'carrier-code': getCarrierCode(carrierInfo),
-        'carrier-name': getCarrierName(carrierInfo),
-        'tracking-number': trackingNumber,
-        'ship-method': '',
-        'cod-collection-method': '',
-        'transparency_code': '',
-        'ship_from_address_name': '',
-        'ship_from_address_line1': '',
-        'ship_from_address_line2': '',
-        'ship_from_address_line3': '',
-        'ship_from_address_city': '',
-        'ship_from_address_county': '',
-        'ship_from_address_state_or_region': '',
-        'ship_from_address_postalcode': '',
-        'ship_from_address_countrycode': ''
-      };
-    });
-
-    setProcessedData(processed);
-    setLoading(false);
-  };
-
-  // 注文番号を抽出（Amazon形式: 123-1234567-1234567）
-  const extractOrderNumber = (row) => {
-    // CSVの列から注文番号らしきものを探す
-    const values = Object.values(row);
-    for (const value of values) {
-      if (typeof value === 'string' && /^\d{3}-\d{7}-\d{7}$/.test(value)) {
-        return value;
-      }
-    }
-    return '';
-  };
-
-  // 出荷日を抽出
-  const extractShipDate = (row) => {
-    const values = Object.values(row);
-    for (const value of values) {
-      if (typeof value === 'string' && value.includes('/')) {
-        return value;
-      }
-    }
-    return new Date().toISOString().split('T')[0];
-  };
-
-  // 配送業者情報を抽出
-  const extractCarrierInfo = (row) => {
-    const values = Object.values(row);
-    for (const value of values) {
-      if (typeof value === 'string' && (
-        value.includes('ヤマト') || 
-        value.includes('佐川') || 
-        value.includes('郵便') ||
-        value.includes('YAMATO') ||
-        value.includes('SAGAWA')
-      )) {
-        return value;
-      }
-    }
-    return 'YAMATO'; // デフォルト
-  };
-
-  // 追跡番号を抽出
-  const extractTrackingNumber = (row) => {
-    const values = Object.values(row);
-    for (const value of values) {
-      if (typeof value === 'string' && /^\d{10,15}$/.test(value)) {
-        return value;
-      }
-    }
-    return '';
-  };
-
-  // 出荷日をフォーマット
-  const formatShipDate = (dateStr) => {
-    if (!dateStr) return new Date().toISOString().split('T')[0];
-    
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-      }
-    }
-    return dateStr;
-  };
-
-  // 配送業者コードを取得
-  const getCarrierCode = (carrierInfo) => {
-    return carrierCodeMap[carrierInfo] || 'YAMATO';
-  };
-
-  // 配送業者名を取得
-  const getCarrierName = (carrierInfo) => {
-    if (carrierInfo.includes('ヤマト') || carrierInfo === 'YAMATO') return 'ヤマト運輸';
-    if (carrierInfo.includes('佐川') || carrierInfo === 'SAGAWA') return '佐川急便';
-    if (carrierInfo.includes('郵便') || carrierInfo === 'Japan Post') return '日本郵便';
-    return 'ヤマト運輸';
-  };
-
-  // TXTファイルをダウンロード
-  const downloadTxt = () => {
-    if (processedData.length === 0) {
-      alert('データを先に処理してください');
-      return;
-    }
-
-    // ヘッダー行を作成
-    const headers = [
-      'TemplateType=OrderFulfillment',
-      'Version=2011.1102',
-      'この行はAmazonが使用しますので変更や削除しないでください。'
-    ];
-
-    const columnHeaders = [
-      '注文番号', '注文商品番号', '出荷数', '出荷日', '配送業者コード', '配送業者名',
-      'お問い合わせ伝票番号', '配送方法', '代金引換', '製品が透明に登録されている場合の製品の透明コード。',
-      '出荷元住所-名称', '出荷元住所-行 1', '出荷元住所-行 2', '出荷元住所-行 3',
-      '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', '出荷元住所-郵便番号',
-      '出荷元住所-国コード'
-    ];
-
-    const columnIds = [
-      'order-id', 'order-item-id', 'quantity', 'ship-date', 'carrier-code', 'carrier-name',
-      'tracking-number', 'ship-method', 'cod-collection-method', 'transparency_code',
-      'ship_from_address_name', 'ship_from_address_line1', 'ship_from_address_line2',
-      'ship_from_address_line3', 'ship_from_address_city', 'ship_from_address_county',
-      'ship_from_address_state_or_region', 'ship_from_address_postalcode', 'ship_from_address_countrycode'
-    ];
-
-    // データ行を作成
-    const dataRows = processedData.map(row => 
-      columnIds.map(id => row[id] || '').join('\t')
-    );
-
-    // 全ての行を結合
-    const content = [
-      headers.join('\t'),
-      columnHeaders.join('\t'),
-      columnIds.join('\t'),
-      ...dataRows
-    ].join('\n');
-
-    // ファイルをダウンロード
-    const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `shipping_notification_${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-8">
-          Amazon出荷通知処理システム
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon出荷通知処理システム</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50 p-6">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold text-gray-900 mb-8">
+            Amazon出荷通知処理システム
         </h1>
 
-        <div className="space-y-6">
-          {/* ファイルアップロード */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-lg font-semibold mb-4">ファイル読み込み</h2>
-            
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amazon注文レポートCSVファイル
-                </label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCsvUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    id="csv-upload"
-                  />
-                  <label
-                    htmlFor="csv-upload"
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 cursor-pointer"
-                  >
-                    ファイルを選択
-                  </label>
+        <div class="space-y-6">
+            <!-- ファイルアップロード -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-lg font-semibold mb-4">ファイル読み込み</h2>
+                
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Amazon注文レポートCSVファイル
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="file"
+                                accept=".csv"
+                                id="csv-upload"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <label
+                                for="csv-upload"
+                                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 cursor-pointer"
+                            >
+                                ファイルを選択
+                            </label>
+                            <span id="file-name" class="ml-3 text-sm text-gray-500"></span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Amazonセラーセントラルからダウンロードした注文レポートをそのままアップロードしてください
+                        </p>
+                    </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Amazonセラーセントラルからダウンロードした注文レポートをそのままアップロードしてください
-                </p>
-              </div>
             </div>
-          </div>
 
-
-
-          {/* 処理ボタン */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-lg font-semibold mb-4">データ処理</h2>
-            
-            <div className="flex space-x-4">
-              <button
-                onClick={processData}
-                disabled={loading || csvData.length === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading ? '処理中...' : 'データ処理実行'}
-              </button>
-              
-              <button
-                onClick={downloadTxt}
-                disabled={processedData.length === 0}
-                className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                TXTファイルダウンロード
-              </button>
+            <!-- 処理ボタン -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-lg font-semibold mb-4">データ処理</h2>
+                
+                <div class="flex space-x-4">
+                    <button
+                        id="process-btn"
+                        class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        disabled
+                    >
+                        データ処理実行
+                    </button>
+                    
+                    <button
+                        id="download-btn"
+                        class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        disabled
+                    >
+                        TXTファイルダウンロード
+                    </button>
+                </div>
             </div>
-          </div>
 
-          {/* プレビュー */}
-          {processedData.length > 0 && (
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold mb-4">処理結果プレビュー</h2>
-              
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="px-3 py-2 text-left">注文番号</th>
-                      <th className="px-3 py-2 text-left">出荷日</th>
-                      <th className="px-3 py-2 text-left">配送業者コード</th>
-                      <th className="px-3 py-2 text-left">配送業者名</th>
-                      <th className="px-3 py-2 text-left">追跡番号</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {processedData.slice(0, 5).map((row, index) => (
-                      <tr key={index} className="border-t">
-                        <td className="px-3 py-2">{row['order-id']}</td>
-                        <td className="px-3 py-2">{row['ship-date']}</td>
-                        <td className="px-3 py-2">{row['carrier-code']}</td>
-                        <td className="px-3 py-2">{row['carrier-name']}</td>
-                        <td className="px-3 py-2">{row['tracking-number']}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {processedData.length > 5 && (
-                  <p className="text-gray-500 text-sm mt-2">
-                    他 {processedData.length - 5} 行...
-                  </p>
-                )}
-              </div>
+            <!-- プレビュー -->
+            <div id="preview-section" class="bg-white p-6 rounded-lg shadow" style="display: none;">
+                <h2 class="text-lg font-semibold mb-4">処理結果プレビュー</h2>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-3 py-2 text-left">注文番号</th>
+                                <th class="px-3 py-2 text-left">出荷日</th>
+                                <th class="px-3 py-2 text-left">配送業者コード</th>
+                                <th class="px-3 py-2 text-left">配送業者名</th>
+                                <th class="px-3 py-2 text-left">追跡番号</th>
+                            </tr>
+                        </thead>
+                        <tbody id="preview-tbody">
+                        </tbody>
+                    </table>
+                    <p id="more-rows" class="text-gray-500 text-sm mt-2" style="display: none;"></p>
+                </div>
             </div>
-          )}
 
-          {/* 注意事項 */}
-          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
-            <ul className="text-sm text-yellow-700 space-y-1">
-              <li>• Amazonセラーセントラルからダウンロードした注文レポートCSVをそのまま使用してください</li>
-              <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
-              <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
-              <li>• テンプレートファイルは自動で読み込まれます</li>
-            </ul>
-          </div>
+            <!-- 注意事項 -->
+            <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+                <h3 class="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
+                <ul class="text-sm text-yellow-700 space-y-1">
+                    <li>• Amazonセラーセントラルからダウンロードした注文レポートCSVをそのまま使用してください</li>
+                    <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
+                    <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
+                    <li>• テンプレートファイルは自動で読み込まれます</li>
+                </ul>
+            </div>
         </div>
-      </div>
     </div>
-  );
-};
 
-export default ShippingNotificationApp;
+    <script>
+        // グローバル変数
+        let csvData = [];
+        let templateData = [];
+        let carrierList = [];
+        let processedData = [];
+        let templateLoaded = false;
+
+        // キャリアコードマッピング
+        const carrierCodeMap = {
+            'ヤマト運輸': 'YAMATO',
+            'YAMATO': 'YAMATO',
+            '日本郵便': 'Japan Post',
+            'Japan Post': 'Japan Post',
+            '佐川急便': 'SAGAWA',
+            'SAGAWA': 'SAGAWA',
+            'フェデックス': 'FEDEX',
+            'FEDEX': 'FEDEX'
+        };
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTemplateFile();
+            setupEventListeners();
+        });
+
+        // イベントリスナー設定
+        function setupEventListeners() {
+            document.getElementById('csv-upload').addEventListener('change', handleCsvUpload);
+            document.getElementById('process-btn').addEventListener('click', processData);
+            document.getElementById('download-btn').addEventListener('click', downloadTxt);
+        }
+
+        // テンプレートファイルを自動読み込み
+        async function loadTemplateFile() {
+            try {
+                const response = await fetch('./Flat.File.ShippingConfirmation.jp.xls');
+                if (!response.ok) {
+                    console.warn('テンプレートファイルが見つかりません');
+                    return;
+                }
+                
+                const fileContent = await response.arrayBuffer();
+                const workbook = XLSX.read(fileContent, { type: 'array' });
+                
+                // テンプレートシートのヘッダー取得
+                const templateSheet = workbook.Sheets['出荷通知テンプレート_Template'];
+                templateData = XLSX.utils.sheet_to_json(templateSheet, { header: 1 });
+                
+                // 配送業者リスト取得
+                const carrierSheet = workbook.Sheets['配送業者名推奨値'];
+                carrierList = XLSX.utils.sheet_to_json(carrierSheet, { header: 1 });
+                
+                templateLoaded = true;
+                console.log('テンプレートファイル自動読み込み完了');
+            } catch (error) {
+                console.warn('テンプレートファイルの自動読み込みに失敗しました:', error.message);
+            }
+        }
+
+        // CSVファイルを読み込む（Amazonダウンロードファイル）
+        async function handleCsvUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('file-name').textContent = file.name;
+
+            try {
+                const fileContent = await file.text();
+                const result = Papa.parse(fileContent, {
+                    header: true,
+                    skipEmptyLines: true,
+                    encoding: 'UTF-8'
+                });
+                
+                csvData = result.data;
+                console.log('Amazonダウンロードファイル読み込み完了:', csvData.length, '件');
+                
+                // 処理ボタンを有効化
+                document.getElementById('process-btn').disabled = false;
+            } catch (error) {
+                alert('CSVファイルの読み込みに失敗しました: ' + error.message);
+            }
+        }
+
+        // データを処理して出荷通知ファイルを生成
+        function processData() {
+            if (csvData.length === 0) {
+                alert('CSVファイルを先に読み込んでください');
+                return;
+            }
+
+            const processed = csvData.map(row => {
+                // CSVから必要なデータを抽出
+                const orderNumber = extractOrderNumber(row);
+                const shipDate = extractShipDate(row);
+                const carrierInfo = extractCarrierInfo(row);
+                const trackingNumber = extractTrackingNumber(row);
+
+                return {
+                    'order-id': orderNumber,
+                    'order-item-id': '',
+                    'quantity': '',
+                    'ship-date': formatShipDate(shipDate),
+                    'carrier-code': getCarrierCode(carrierInfo),
+                    'carrier-name': getCarrierName(carrierInfo),
+                    'tracking-number': trackingNumber,
+                    'ship-method': '',
+                    'cod-collection-method': '',
+                    'transparency_code': '',
+                    'ship_from_address_name': '',
+                    'ship_from_address_line1': '',
+                    'ship_from_address_line2': '',
+                    'ship_from_address_line3': '',
+                    'ship_from_address_city': '',
+                    'ship_from_address_county': '',
+                    'ship_from_address_state_or_region': '',
+                    'ship_from_address_postalcode': '',
+                    'ship_from_address_countrycode': ''
+                };
+            });
+
+            processedData = processed;
+            displayPreview(processed);
+            
+            // ダウンロードボタンを有効化
+            document.getElementById('download-btn').disabled = false;
+        }
+
+        // 注文番号を抽出（Amazon形式: 123-1234567-1234567）
+        function extractOrderNumber(row) {
+            const values = Object.values(row);
+            for (const value of values) {
+                if (typeof value === 'string' && /^\d{3}-\d{7}-\d{7}$/.test(value)) {
+                    return value;
+                }
+            }
+            return '';
+        }
+
+        // 出荷日を抽出
+        function extractShipDate(row) {
+            const values = Object.values(row);
+            for (const value of values) {
+                if (typeof value === 'string' && value.includes('/')) {
+                    return value;
+                }
+            }
+            return new Date().toISOString().split('T')[0];
+        }
+
+        // 配送業者情報を抽出
+        function extractCarrierInfo(row) {
+            const values = Object.values(row);
+            for (const value of values) {
+                if (typeof value === 'string' && (
+                    value.includes('ヤマト') || 
+                    value.includes('佐川') || 
+                    value.includes('郵便') ||
+                    value.includes('YAMATO') ||
+                    value.includes('SAGAWA')
+                )) {
+                    return value;
+                }
+            }
+            return 'YAMATO'; // デフォルト
+        }
+
+        // 追跡番号を抽出
+        function extractTrackingNumber(row) {
+            const values = Object.values(row);
+            for (const value of values) {
+                if (typeof value === 'string' && /^\d{10,15}$/.test(value)) {
+                    return value;
+                }
+            }
+            return '';
+        }
+
+        // 出荷日をフォーマット
+        function formatShipDate(dateStr) {
+            if (!dateStr) return new Date().toISOString().split('T')[0];
+            
+            if (dateStr.includes('/')) {
+                const parts = dateStr.split('/');
+                if (parts.length === 3) {
+                    return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                }
+            }
+            return dateStr;
+        }
+
+        // 配送業者コードを取得
+        function getCarrierCode(carrierInfo) {
+            return carrierCodeMap[carrierInfo] || 'YAMATO';
+        }
+
+        // 配送業者名を取得
+        function getCarrierName(carrierInfo) {
+            if (carrierInfo.includes('ヤマト') || carrierInfo === 'YAMATO') return 'ヤマト運輸';
+            if (carrierInfo.includes('佐川') || carrierInfo === 'SAGAWA') return '佐川急便';
+            if (carrierInfo.includes('郵便') || carrierInfo === 'Japan Post') return '日本郵便';
+            return 'ヤマト運輸';
+        }
+
+        // プレビューを表示
+        function displayPreview(data) {
+            const previewSection = document.getElementById('preview-section');
+            const tbody = document.getElementById('preview-tbody');
+            const moreRows = document.getElementById('more-rows');
+            
+            // テーブルクリア
+            tbody.innerHTML = '';
+            
+            // 最初の5行を表示
+            const displayData = data.slice(0, 5);
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-t';
+                tr.innerHTML = `
+                    <td class="px-3 py-2">${row['order-id']}</td>
+                    <td class="px-3 py-2">${row['ship-date']}</td>
+                    <td class="px-3 py-2">${row['carrier-code']}</td>
+                    <td class="px-3 py-2">${row['carrier-name']}</td>
+                    <td class="px-3 py-2">${row['tracking-number']}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            
+            // 残り行数表示
+            if (data.length > 5) {
+                moreRows.textContent = `他 ${data.length - 5} 行...`;
+                moreRows.style.display = 'block';
+            } else {
+                moreRows.style.display = 'none';
+            }
+            
+            previewSection.style.display = 'block';
+        }
+
+        // TXTファイルをダウンロード
+        function downloadTxt() {
+            if (processedData.length === 0) {
+                alert('データを先に処理してください');
+                return;
+            }
+
+            // ヘッダー行を作成
+            const headers = [
+                'TemplateType=OrderFulfillment',
+                'Version=2011.1102',
+                'この行はAmazonが使用しますので変更や削除しないでください。'
+            ];
+
+            const columnHeaders = [
+                '注文番号', '注文商品番号', '出荷数', '出荷日', '配送業者コード', '配送業者名',
+                'お問い合わせ伝票番号', '配送方法', '代金引換', '製品が透明に登録されている場合の製品の透明コード。',
+                '出荷元住所-名称', '出荷元住所-行 1', '出荷元住所-行 2', '出荷元住所-行 3',
+                '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', '出荷元住所-郵便番号',
+                '出荷元住所-国コード'
+            ];
+
+            const columnIds = [
+                'order-id', 'order-item-id', 'quantity', 'ship-date', 'carrier-code', 'carrier-name',
+                'tracking-number', 'ship-method', 'cod-collection-method', 'transparency_code',
+                'ship_from_address_name', 'ship_from_address_line1', 'ship_from_address_line2',
+                'ship_from_address_line3', 'ship_from_address_city', 'ship_from_address_county',
+                'ship_from_address_state_or_region', 'ship_from_address_postalcode', 'ship_from_address_countrycode'
+            ];
+
+            // データ行を作成
+            const dataRows = processedData.map(row => 
+                columnIds.map(id => row[id] || '').join('\t')
+            );
+
+            // 全ての行を結合
+            const content = [
+                headers.join('\t'),
+                columnHeaders.join('\t'),
+                columnIds.join('\t'),
+                ...dataRows
+            ].join('\n');
+
+            // ファイルをダウンロード
+            const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `shipping_notification_${new Date().toISOString().split('T')[0]}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
