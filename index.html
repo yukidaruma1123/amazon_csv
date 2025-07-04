@@ -22,17 +22,16 @@
                 <div class="grid grid-cols-1 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
-                            Amazon注文レポートTSVファイル
+                            Amazon注文レポートTXTファイル
                         </label>
                         <div class="relative">
                             <input
                                 type="file"
-                                accept=".csv"
-                                id="csv-upload"
+                                id="txt-upload"
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                             <label
-                                for="csv-upload"
+                                for="txt-upload"
                                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 cursor-pointer"
                             >
                                 ファイルを選択
@@ -40,7 +39,7 @@
                             <span id="file-name" class="ml-3 text-sm text-gray-500"></span>
                         </div>
                         <p class="text-xs text-gray-500 mt-1">
-                            Amazonセラーセントラルからダウンロードした注文レポート（.txt形式）をそのままアップロードしてください
+                            Amazonセラーセントラルからダウンロードした注文レポート（TXTファイル）をそのままアップロードしてください
                         </p>
                     </div>
                 </div>
@@ -95,10 +94,10 @@
             <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
                 <h3 class="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
                 <ul class="text-sm text-yellow-700 space-y-1">
-                    <li>• Amazonセラーセントラルからダウンロードした注文レポート（.txt形式）をそのまま使用してください</li>
-                    <li>• 追跡番号は手動で入力する必要があります（生成後にExcelで編集してください）</li>
-                    <li>• 出荷日は本日の日付が自動設定されます</li>
+                    <li>• Amazonセラーセントラルからダウンロードした注文レポートCSVをそのまま使用してください</li>
+                    <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
                     <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
+                    <li>• テンプレートファイルは自動で読み込まれます</li>
                 </ul>
             </div>
         </div>
@@ -132,7 +131,7 @@
 
         // イベントリスナー設定
         function setupEventListeners() {
-            document.getElementById('csv-upload').addEventListener('change', handleCsvUpload);
+            document.getElementById('txt-upload').addEventListener('change', handleTxtUpload);
             document.getElementById('process-btn').addEventListener('click', processData);
             document.getElementById('download-btn').addEventListener('click', downloadTxt);
         }
@@ -164,8 +163,8 @@
             }
         }
 
-        // CSVファイルを読み込む（AmazonダウンロードファイルTSV形式）
-        async function handleCsvUpload(event) {
+        // TXTファイルを読み込む（Amazon注文レポート）
+        async function handleTxtUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
@@ -176,7 +175,7 @@
                 const result = Papa.parse(fileContent, {
                     header: true,
                     skipEmptyLines: true,
-                    delimiter: '\t',  // タブ区切り
+                    delimiter: '\t', // TSV形式（タブ区切り）
                     encoding: 'UTF-8'
                 });
                 
@@ -186,28 +185,28 @@
                 // 処理ボタンを有効化
                 document.getElementById('process-btn').disabled = false;
             } catch (error) {
-                alert('TSVファイルの読み込みに失敗しました: ' + error.message);
+                alert('TXTファイルの読み込みに失敗しました: ' + error.message);
             }
         }
 
         // データを処理して出荷通知ファイルを生成
         function processData() {
             if (csvData.length === 0) {
-                alert('CSVファイルを先に読み込んでください');
+                alert('TXTファイルを先に読み込んでください');
                 return;
             }
 
             const processed = csvData.map(row => {
-                // CSVから必要なデータを抽出
-                const orderNumber = extractOrderNumber(row);
+                // Amazon注文レポートの標準フィールドから抽出
+                const orderNumber = row['order-id'] || '';
                 const shipDate = extractShipDate(row);
-                const carrierInfo = extractCarrierInfo(row);
+                const carrierInfo = row['ssa-carrier'] || 'ヤマト運輸';
                 const trackingNumber = extractTrackingNumber(row);
 
                 return {
                     'order-id': orderNumber,
-                    'order-item-id': '',
-                    'quantity': '',
+                    'order-item-id': row['order-item-id'] || '',
+                    'quantity': row['quantity-purchased'] || '',
                     'ship-date': formatShipDate(shipDate),
                     'carrier-code': getCarrierCode(carrierInfo),
                     'carrier-name': getCarrierName(carrierInfo),
@@ -234,40 +233,25 @@
             document.getElementById('download-btn').disabled = false;
         }
 
-        // 注文番号を抽出（Amazon形式: 123-1234567-1234567）
+        // 注文番号を抽出（Amazon標準フィールド）
         function extractOrderNumber(row) {
-            // order-id列から直接取得
-            if (row['order-id']) {
-                return row['order-id'];
-            }
-            
-            // fallback: 値を検索
-            const values = Object.values(row);
-            for (const value of values) {
-                if (typeof value === 'string' && /^\d{3}-\d{7}-\d{7}$/.test(value)) {
-                    return value;
-                }
-            }
-            return '';
+            return row['order-id'] || '';
         }
 
-        // 出荷日を抽出（今日の日付を使用）
+        // 出荷日を抽出（今日の日付をデフォルトに）
         function extractShipDate(row) {
+            // 出荷日は手動入力が必要なため、今日の日付を使用
             return new Date().toISOString().split('T')[0];
         }
 
-        // 配送業者情報を抽出（Amazon標準はヤマト運輸）
+        // 配送業者情報を抽出
         function extractCarrierInfo(row) {
-            // ssa-carrier列から取得
-            if (row['ssa-carrier']) {
-                return row['ssa-carrier'];
-            }
-            return 'ヤマト運輸'; // デフォルト
+            return row['ssa-carrier'] || 'ヤマト運輸';
         }
 
         // 追跡番号を抽出（手動入力が必要）
         function extractTrackingNumber(row) {
-            // 追跡番号は手動で入力する必要がある
+            // 追跡番号は通常手動入力が必要
             return '';
         }
 
@@ -275,26 +259,37 @@
         function formatShipDate(dateStr) {
             if (!dateStr) return new Date().toISOString().split('T')[0];
             
-            if (dateStr.includes('/')) {
-                const parts = dateStr.split('/');
-                if (parts.length === 3) {
-                    return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-                }
+            // 既にYYYY-MM-DD形式の場合はそのまま返す
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                return dateStr;
             }
-            return dateStr;
+            
+            // その他の形式は今日の日付を使用
+            return new Date().toISOString().split('T')[0];
         }
 
         // 配送業者コードを取得
         function getCarrierCode(carrierInfo) {
-            return carrierCodeMap[carrierInfo] || 'YAMATO';
+            if (!carrierInfo) return 'YAMATO';
+            
+            if (carrierInfo.includes('ヤマト') || carrierInfo.includes('YAMATO')) return 'YAMATO';
+            if (carrierInfo.includes('佐川') || carrierInfo.includes('SAGAWA')) return 'SAGAWA';
+            if (carrierInfo.includes('郵便') || carrierInfo.includes('Japan Post')) return 'Japan Post';
+            if (carrierInfo.includes('フェデックス') || carrierInfo.includes('FEDEX')) return 'FEDEX';
+            
+            return 'YAMATO'; // デフォルト
         }
 
         // 配送業者名を取得
         function getCarrierName(carrierInfo) {
-            if (carrierInfo.includes('ヤマト') || carrierInfo === 'YAMATO') return 'ヤマト運輸';
-            if (carrierInfo.includes('佐川') || carrierInfo === 'SAGAWA') return '佐川急便';
-            if (carrierInfo.includes('郵便') || carrierInfo === 'Japan Post') return '日本郵便';
-            return 'ヤマト運輸';
+            if (!carrierInfo) return 'ヤマト運輸';
+            
+            if (carrierInfo.includes('ヤマト') || carrierInfo.includes('YAMATO')) return 'ヤマト運輸';
+            if (carrierInfo.includes('佐川') || carrierInfo.includes('SAGAWA')) return '佐川急便';
+            if (carrierInfo.includes('郵便') || carrierInfo.includes('Japan Post')) return '日本郵便';
+            if (carrierInfo.includes('フェデックス') || carrierInfo.includes('FEDEX')) return 'フェデックス';
+            
+            return 'ヤマト運輸'; // デフォルト
         }
 
         // プレビューを表示
