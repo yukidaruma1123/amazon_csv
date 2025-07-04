@@ -22,7 +22,7 @@
                 <div class="grid grid-cols-1 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
-                            Amazon注文レポートCSVファイル
+                            Amazon注文レポートTSVファイル
                         </label>
                         <div class="relative">
                             <input
@@ -40,7 +40,7 @@
                             <span id="file-name" class="ml-3 text-sm text-gray-500"></span>
                         </div>
                         <p class="text-xs text-gray-500 mt-1">
-                            Amazonセラーセントラルからダウンロードした注文レポートをそのままアップロードしてください
+                            Amazonセラーセントラルからダウンロードした注文レポート（.txt形式）をそのままアップロードしてください
                         </p>
                     </div>
                 </div>
@@ -95,10 +95,10 @@
             <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
                 <h3 class="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
                 <ul class="text-sm text-yellow-700 space-y-1">
-                    <li>• Amazonセラーセントラルからダウンロードした注文レポートCSVをそのまま使用してください</li>
-                    <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
+                    <li>• Amazonセラーセントラルからダウンロードした注文レポート（.txt形式）をそのまま使用してください</li>
+                    <li>• 追跡番号は手動で入力する必要があります（生成後にExcelで編集してください）</li>
+                    <li>• 出荷日は本日の日付が自動設定されます</li>
                     <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
-                    <li>• テンプレートファイルは自動で読み込まれます</li>
                 </ul>
             </div>
         </div>
@@ -164,7 +164,7 @@
             }
         }
 
-        // CSVファイルを読み込む（Amazonダウンロードファイル）
+        // CSVファイルを読み込む（AmazonダウンロードファイルTSV形式）
         async function handleCsvUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -176,16 +176,17 @@
                 const result = Papa.parse(fileContent, {
                     header: true,
                     skipEmptyLines: true,
+                    delimiter: '\t',  // タブ区切り
                     encoding: 'UTF-8'
                 });
                 
                 csvData = result.data;
-                console.log('Amazonダウンロードファイル読み込み完了:', csvData.length, '件');
+                console.log('Amazon注文レポート読み込み完了:', csvData.length, '件');
                 
                 // 処理ボタンを有効化
                 document.getElementById('process-btn').disabled = false;
             } catch (error) {
-                alert('CSVファイルの読み込みに失敗しました: ' + error.message);
+                alert('TSVファイルの読み込みに失敗しました: ' + error.message);
             }
         }
 
@@ -235,6 +236,12 @@
 
         // 注文番号を抽出（Amazon形式: 123-1234567-1234567）
         function extractOrderNumber(row) {
+            // order-id列から直接取得
+            if (row['order-id']) {
+                return row['order-id'];
+            }
+            
+            // fallback: 値を検索
             const values = Object.values(row);
             for (const value of values) {
                 if (typeof value === 'string' && /^\d{3}-\d{7}-\d{7}$/.test(value)) {
@@ -244,42 +251,23 @@
             return '';
         }
 
-        // 出荷日を抽出
+        // 出荷日を抽出（今日の日付を使用）
         function extractShipDate(row) {
-            const values = Object.values(row);
-            for (const value of values) {
-                if (typeof value === 'string' && value.includes('/')) {
-                    return value;
-                }
-            }
             return new Date().toISOString().split('T')[0];
         }
 
-        // 配送業者情報を抽出
+        // 配送業者情報を抽出（Amazon標準はヤマト運輸）
         function extractCarrierInfo(row) {
-            const values = Object.values(row);
-            for (const value of values) {
-                if (typeof value === 'string' && (
-                    value.includes('ヤマト') || 
-                    value.includes('佐川') || 
-                    value.includes('郵便') ||
-                    value.includes('YAMATO') ||
-                    value.includes('SAGAWA')
-                )) {
-                    return value;
-                }
+            // ssa-carrier列から取得
+            if (row['ssa-carrier']) {
+                return row['ssa-carrier'];
             }
-            return 'YAMATO'; // デフォルト
+            return 'ヤマト運輸'; // デフォルト
         }
 
-        // 追跡番号を抽出
+        // 追跡番号を抽出（手動入力が必要）
         function extractTrackingNumber(row) {
-            const values = Object.values(row);
-            for (const value of values) {
-                if (typeof value === 'string' && /^\d{10,15}$/.test(value)) {
-                    return value;
-                }
-            }
+            // 追跡番号は手動で入力する必要がある
             return '';
         }
 
