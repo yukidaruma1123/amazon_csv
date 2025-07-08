@@ -350,13 +350,12 @@
                 const address2 = row[12] || ''; // M列：住所2
                 const name = row[15] || ''; // P列：名前
                 
-                if (index < 3) {
+                if (index < 5) {
                     console.log(`CSVデータ ${index + 1}:`, {
                         trackingNumber,
-                        phone,
-                        address1,
-                        address2,
-                        name
+                        phone: `"${phone}" (${phone ? phone.length : 0}桁)`,
+                        name: `"${name}"`,
+                        address1: `"${address1}"`
                     });
                 }
                 
@@ -365,9 +364,11 @@
                     const normalizedPhone = normalizePhone(phone);
                     if (normalizedPhone) {
                         phoneMap[normalizedPhone] = trackingNumber;
-                        if (index < 3) {
-                            console.log(`  電話番号マップ: ${phone} → ${normalizedPhone} → ${trackingNumber}`);
+                        if (index < 5) {
+                            console.log(`  電話番号マップ: "${phone}" → "${normalizedPhone}" → ${trackingNumber}`);
                         }
+                    } else if (index < 5) {
+                        console.log(`  電話番号正規化失敗: "${phone}"`);
                     }
                 }
                 
@@ -377,7 +378,7 @@
                     const nameAddressKey = `${name.trim()}|${fullAddress}`;
                     nameAddressMap[nameAddressKey] = trackingNumber;
                     if (index < 3) {
-                        console.log(`  名前+住所マップ: ${nameAddressKey} → ${trackingNumber}`);
+                        console.log(`  名前+住所マップ: "${nameAddressKey}" → ${trackingNumber}`);
                     }
                 }
             });
@@ -388,7 +389,8 @@
             });
             
             // 電話番号マップのサンプルを表示
-            console.log('電話番号マップサンプル:', Object.entries(phoneMap).slice(0, 3));
+            const phoneMapEntries = Object.entries(phoneMap).slice(0, 5);
+            console.log('電話番号マップサンプル:', phoneMapEntries);
             
             return { phoneMap, nameAddressMap };
         }
@@ -448,12 +450,31 @@
             // ハイフン・スペース削除
             let normalized = phone.replace(/[-\s]/g, '');
             
-            // 先頭0補完
+            // 数字のみかチェック
+            if (!/^\d+$/.test(normalized)) return null;
+            
+            // 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
+            if (normalized.length === 9 && !normalized.startsWith('0')) {
+                normalized = '0' + normalized;
+            }
+            
+            // 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
             if (normalized.length === 10 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
-            return normalized.length === 11 ? normalized : null;
+            // 11桁で先頭が0の場合はそのまま（携帯電話）
+            if (normalized.length === 11 && normalized.startsWith('0')) {
+                return normalized;
+            }
+            
+            // 10桁で先頭が0の場合もそのまま（固定電話）
+            if (normalized.length === 10 && normalized.startsWith('0')) {
+                return normalized;
+            }
+            
+            console.log(`電話番号正規化失敗: "${phone}" → "${normalized}" (${normalized.length}桁)`);
+            return null;
         }
 
         // 住所正規化
