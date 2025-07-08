@@ -8,667 +8,590 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-gray-50 p-6">
-    <div class="max-w-4xl mx-auto">
-        <h1 class="text-2xl font-bold text-gray-900 mb-8">
-            Amazon出荷通知処理システム
-        </h1>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-8 text-center">
+                📦 Amazon出荷通知処理システム
+            </h1>
 
-        <div class="space-y-6">
-            <!-- ファイルアップロード -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <h2 class="text-lg font-semibold mb-4">ファイル読み込み</h2>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            注文レポートファイル
-                        </label>
-                        <input
-                            type="file"
-                            id="txt-upload"
-                            class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
-                        />
+            <!-- ステップ表示 -->
+            <div class="mb-8">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center">
+                        <div id="step1-indicator" class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-2">1</div>
+                        <span class="text-sm font-medium">テンプレート読み込み</span>
                     </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">
-                            追跡番号ファイル
-                        </label>
-                        <input
-                            type="file"
-                            id="csv-upload"
-                            accept=".csv"
-                            class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none"
-                        />
+                    <div class="flex-1 h-1 bg-gray-200 mx-4">
+                        <div id="progress1" class="h-1 bg-blue-500 transition-all duration-300" style="width: 0%"></div>
                     </div>
+                    <div class="flex items-center">
+                        <div id="step2-indicator" class="w-8 h-8 bg-gray-300 text-gray-600 rounded-full flex items-center justify-center font-bold mr-2">2</div>
+                        <span class="text-sm font-medium">ファイル選択</span>
+                    </div>
+                    <div class="flex-1 h-1 bg-gray-200 mx-4">
+                        <div id="progress2" class="h-1 bg-blue-500 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div class="flex items-center">
+                        <div id="step3-indicator" class="w-8 h-8 bg-gray-300 text-gray-600 rounded-full flex items-center justify-center font-bold mr-2">3</div>
+                        <span class="text-sm font-medium">データ処理</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- テンプレートファイル読み込み状況 -->
+            <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 class="font-semibold text-blue-800 mb-2">📋 テンプレートファイル状況</h3>
+                <div id="template-status" class="text-blue-700">
+                    <div class="flex items-center">
+                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                        テンプレートファイルを読み込み中...
+                    </div>
+                </div>
+            </div>
+
+            <!-- ファイル選択エリア -->
+            <div class="grid md:grid-cols-2 gap-6 mb-6">
+                <!-- Amazon注文レポート -->
+                <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 transition-colors">
+                    <h3 class="font-semibold text-gray-700 mb-2">📊 Amazon注文レポート</h3>
+                    <p class="text-sm text-gray-600 mb-3">TSV形式 (.txt)</p>
+                    <input type="file" id="amazon-file" accept=".txt" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div id="amazon-status" class="mt-2 text-sm"></div>
+                </div>
+
+                <!-- 追跡番号CSV -->
+                <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 transition-colors">
+                    <h3 class="font-semibold text-gray-700 mb-2">🚚 追跡番号CSV</h3>
+                    <p class="text-sm text-gray-600 mb-3">CSV形式 (.csv)</p>
+                    <input type="file" id="tracking-file" accept=".csv" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div id="tracking-status" class="mt-2 text-sm"></div>
                 </div>
             </div>
 
             <!-- 処理ボタン -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <h2 class="text-lg font-semibold mb-4">データ処理</h2>
-                
-                <div class="flex space-x-4">
-                    <button
-                        id="process-btn"
-                        class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        disabled
-                    >
-                        データ処理実行
-                    </button>
-                    
-                    <button
-                        id="download-btn"
-                        class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        disabled
-                    >
-                        TXTファイルダウンロード
-                    </button>
+            <div class="text-center mb-6">
+                <button id="process-btn" 
+                        class="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:cursor-not-allowed"
+                        disabled>
+                    🔄 データを処理して出荷通知ファイルを生成
+                </button>
+            </div>
+
+            <!-- 結果表示エリア -->
+            <div id="results" class="hidden">
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <h3 class="font-semibold text-green-800 mb-2">✅ 処理完了</h3>
+                    <div id="results-summary" class="text-green-700"></div>
+                </div>
+
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <h3 class="font-semibold text-gray-800 mb-2">📈 マッチング詳細</h3>
+                    <div id="matching-details" class="text-gray-700 text-sm"></div>
                 </div>
             </div>
 
-            <!-- プレビュー -->
-            <div id="preview-section" class="bg-white p-6 rounded-lg shadow" style="display: none;">
-                <h2 class="text-lg font-semibold mb-4">処理結果プレビュー</h2>
-                
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead>
-                            <tr class="bg-gray-50">
-                                <th class="px-3 py-2 text-left">注文番号</th>
-                                <th class="px-3 py-2 text-left">出荷日</th>
-                                <th class="px-3 py-2 text-left">配送業者コード</th>
-                                <th class="px-3 py-2 text-left">配送業者名</th>
-                                <th class="px-3 py-2 text-left">追跡番号</th>
-                            </tr>
-                        </thead>
-                        <tbody id="preview-tbody">
-                        </tbody>
-                    </table>
-                    <p id="more-rows" class="text-gray-500 text-sm mt-2" style="display: none;"></p>
-                </div>
+            <!-- エラー表示エリア -->
+            <div id="error-message" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h3 class="font-semibold text-red-800 mb-2">❌ エラー</h3>
+                <div id="error-text" class="text-red-700"></div>
             </div>
 
-            <!-- 注意事項 -->
-            <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-                <h3 class="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
-                <ul class="text-sm text-yellow-700 space-y-1">
-                    <li>• Amazonセラーセントラルからダウンロードした注文レポートCSVをそのまま使用してください</li>
-                    <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
-                    <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
-                    <li>• テンプレートファイルは自動で読み込まれます</li>
-                </ul>
+            <!-- 進行状況表示 -->
+            <div id="progress-area" class="hidden">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 class="font-semibold text-blue-800 mb-2">⚙️ 処理中...</h3>
+                    <div class="w-full bg-blue-200 rounded-full h-2 mb-2">
+                        <div id="progress-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div id="progress-text" class="text-blue-700 text-sm">処理を開始しています...</div>
+                </div>
             </div>
+        </div>
+
+        <!-- フッター -->
+        <div class="text-center mt-8 text-gray-600 text-sm">
+            <p>Amazon出荷通知処理システム v1.0.0</p>
+            <p>対応配送業者: ヤマト運輸・佐川急便・日本郵便・フェデックス</p>
         </div>
     </div>
 
     <script>
         // グローバル変数
-        let amazonOrderData = [];
+        let templateData = null;
+        let amazonOrders = [];
         let trackingData = [];
-        let templateData = [];
-        let carrierList = [];
-        let processedData = [];
-        let templateLoaded = false;
-
-        // キャリアコードマッピング
-        const carrierCodeMap = {
-            'ヤマト運輸': 'YAMATO',
-            'YAMATO': 'YAMATO',
-            '日本郵便': 'Japan Post',
-            'Japan Post': 'Japan Post',
-            '佐川急便': 'SAGAWA',
-            'SAGAWA': 'SAGAWA',
-            'フェデックス': 'FEDEX',
-            'FEDEX': 'FEDEX'
-        };
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded - 初期化開始');
-            
-            loadTemplateFile();
-            
-            // 直接イベントリスナーを設定
-            const txtUpload = document.getElementById('txt-upload');
-            const csvUpload = document.getElementById('csv-upload');
-            const processBtn = document.getElementById('process-btn');
-            const downloadBtn = document.getElementById('download-btn');
-            
-            console.log('要素確認:', {
-                txtUpload: !!txtUpload,
-                csvUpload: !!csvUpload,
-                processBtn: !!processBtn,
-                downloadBtn: !!downloadBtn
-            });
-            
-            if (txtUpload) {
-                txtUpload.addEventListener('change', handleTxtUpload);
-                console.log('TXTアップロードイベント設定完了');
-            }
-            
-            if (csvUpload) {
-                csvUpload.addEventListener('change', handleCsvUpload);
-                console.log('CSVアップロードイベント設定完了');
-            }
-            
-            if (processBtn) {
-                processBtn.addEventListener('click', processData);
-                console.log('処理ボタンイベント設定完了');
-            }
-            
-            if (downloadBtn) {
-                downloadBtn.addEventListener('click', downloadTxt);
-                console.log('ダウンロードボタンイベント設定完了');
-            }
-            
-            console.log('初期化完了');
+            loadTemplate();
+            setupEventListeners();
         });
 
-        // イベントリスナー設定
-        function setupEventListeners() {
-            document.getElementById('txt-upload').addEventListener('change', handleTxtUpload);
-            document.getElementById('process-btn').addEventListener('click', processData);
-            document.getElementById('download-btn').addEventListener('click', downloadTxt);
-        }
-
-        // テンプレートファイルを自動読み込み
-        async function loadTemplateFile() {
+        // テンプレートファイルの読み込み
+        async function loadTemplate() {
             try {
-                const response = await fetch('./Flat.File.ShippingConfirmation.jp.xls');
+                const response = await fetch('Flat.File.ShippingConfirmation.jp.xls');
                 if (!response.ok) {
-                    console.warn('テンプレートファイルが見つかりません');
-                    return;
+                    throw new Error('テンプレートファイルが見つかりません');
                 }
                 
-                const fileContent = await response.arrayBuffer();
-                const workbook = XLSX.read(fileContent, { type: 'array' });
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                 
-                // テンプレートシートのヘッダー取得
-                const templateSheet = workbook.Sheets['出荷通知テンプレート_Template'];
-                templateData = XLSX.utils.sheet_to_json(templateSheet, { header: 1 });
+                // 最初のシートを取得
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
                 
-                // 配送業者リスト取得
-                const carrierSheet = workbook.Sheets['配送業者名推奨値'];
-                carrierList = XLSX.utils.sheet_to_json(carrierSheet, { header: 1 });
+                // ヘッダー行を取得（テンプレート構造の確認）
+                const headers = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0];
+                templateData = { workbook, headers };
                 
-                templateLoaded = true;
-                console.log('テンプレートファイル自動読み込み完了');
+                updateTemplateStatus(true, `✅ テンプレート読み込み完了 (${headers.length}列)`);
+                updateStep(1, true);
+                
             } catch (error) {
-                console.warn('テンプレートファイルの自動読み込みに失敗しました:', error.message);
+                console.error('テンプレート読み込みエラー:', error);
+                updateTemplateStatus(false, `❌ テンプレート読み込み失敗: ${error.message}`);
             }
         }
 
-        // Amazon注文レポートファイルを読み込む
-        async function handleTxtUpload(event) {
-            console.log('TXT upload triggered');
-            const file = event.target.files[0];
-            console.log('TXT file selected:', file ? file.name : 'none');
+        // イベントリスナーの設定
+        function setupEventListeners() {
+            document.getElementById('amazon-file').addEventListener('change', handleAmazonFile);
+            document.getElementById('tracking-file').addEventListener('change', handleTrackingFile);
+            document.getElementById('process-btn').addEventListener('click', processData);
+        }
+
+        // ステップ表示の更新
+        function updateStep(step, completed) {
+            const indicator = document.getElementById(`step${step}-indicator`);
+            const progress = document.getElementById(`progress${step}`);
             
+            if (completed) {
+                indicator.className = 'w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center font-bold mr-2';
+                indicator.innerHTML = '✓';
+                if (progress) progress.style.width = '100%';
+                
+                // 次のステップをアクティブに
+                if (step < 3) {
+                    const nextIndicator = document.getElementById(`step${step + 1}-indicator`);
+                    nextIndicator.className = 'w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold mr-2';
+                }
+            }
+        }
+
+        // テンプレート状況の更新
+        function updateTemplateStatus(success, message) {
+            const statusElement = document.getElementById('template-status');
+            statusElement.innerHTML = message;
+            statusElement.className = success ? 'text-green-700' : 'text-red-700';
+        }
+
+        // Amazonファイルの処理
+        async function handleAmazonFile(event) {
+            const file = event.target.files[0];
             if (!file) return;
 
             try {
-                const fileContent = await file.text();
-                const result = Papa.parse(fileContent, {
-                    header: true,
-                    skipEmptyLines: true,
-                    delimiter: '\t',
-                    encoding: 'UTF-8'
-                });
+                const content = await readFileAsText(file);
+                amazonOrders = parseAmazonReport(content);
                 
-                amazonOrderData = result.data;
-                console.log('注文レポートファイル読み込み完了:', amazonOrderData.length, '件');
+                const statusElement = document.getElementById('amazon-status');
+                statusElement.innerHTML = `✅ ${amazonOrders.length}件の注文を読み込みました`;
+                statusElement.className = 'text-green-600';
                 
-                checkProcessButtonState();
+                updateStep(2, amazonOrders.length > 0 && trackingData.length > 0);
+                updateProcessButton();
+                
             } catch (error) {
-                console.error('TXT読み込みエラー:', error);
-                alert('注文レポートファイルの読み込みに失敗しました: ' + error.message);
+                console.error('Amazonファイル読み込みエラー:', error);
+                const statusElement = document.getElementById('amazon-status');
+                statusElement.innerHTML = `❌ エラー: ${error.message}`;
+                statusElement.className = 'text-red-600';
             }
         }
 
-        // 追跡番号ファイルを読み込む
-        async function handleCsvUpload(event) {
-            console.log('CSV upload triggered');
+        // 追跡番号ファイルの処理
+        async function handleTrackingFile(event) {
             const file = event.target.files[0];
-            console.log('CSV file selected:', file ? file.name : 'none');
-            
             if (!file) return;
 
             try {
-                const arrayBuffer = await file.arrayBuffer();
-                const decoder = new TextDecoder('shift_jis');
-                const fileContent = decoder.decode(arrayBuffer);
+                const content = await readFileAsText(file, 'Shift_JIS');
+                trackingData = parseTrackingCSV(content);
                 
-                const result = Papa.parse(fileContent, {
-                    header: false,
-                    skipEmptyLines: true,
-                    delimiter: ',',
-                    encoding: 'shift_jis'
-                });
+                const statusElement = document.getElementById('tracking-status');
+                statusElement.innerHTML = `✅ ${trackingData.length}件の追跡情報を読み込みました`;
+                statusElement.className = 'text-green-600';
                 
-                trackingData = result.data;
-                console.log('追跡番号ファイル読み込み完了:', trackingData.length, '件');
+                updateStep(2, amazonOrders.length > 0 && trackingData.length > 0);
+                updateProcessButton();
                 
-                checkProcessButtonState();
             } catch (error) {
-                console.error('CSV読み込みエラー:', error);
-                alert('追跡番号ファイルの読み込みに失敗しました: ' + error.message);
+                console.error('追跡ファイル読み込みエラー:', error);
+                const statusElement = document.getElementById('tracking-status');
+                statusElement.innerHTML = `❌ エラー: ${error.message}`;
+                statusElement.className = 'text-red-600';
             }
         }
 
-        // 処理ボタンの状態をチェック
-        function checkProcessButtonState() {
-            const processBtn = document.getElementById('process-btn');
-            const hasOrderData = amazonOrderData.length > 0;
-            const hasTrackingData = trackingData.length > 0;
-            
-            console.log('Check button state:', {
-                hasOrderData,
-                hasTrackingData,
-                orderCount: amazonOrderData.length,
-                trackingCount: trackingData.length
+        // ファイル読み込み関数
+        function readFileAsText(file, encoding = 'UTF-8') {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(new Error('ファイル読み込みに失敗しました'));
+                
+                if (encoding === 'Shift_JIS') {
+                    reader.readAsText(file, 'Shift_JIS');
+                } else {
+                    reader.readAsText(file, 'UTF-8');
+                }
             });
-            
-            processBtn.disabled = !(hasOrderData && hasTrackingData);
-            
-            if (hasOrderData && hasTrackingData) {
-                console.log('両ファイル読み込み完了 - ボタン有効化');
-            }
         }
 
-        // データを処理して出荷通知ファイルを生成
-        function processData() {
-            if (amazonOrderData.length === 0) {
-                alert('注文レポートファイルを先に読み込んでください');
-                return;
-            }
-
-            if (trackingData.length === 0) {
-                alert('追跡番号ファイルを先に読み込んでください');
-                return;
-            }
-
-            // 追跡番号マップを作成
-            const trackingMap = buildTrackingMap();
+        // 電話番号の正規化
+        function normalizePhoneNumber(phone) {
+            if (!phone) return '';
             
-            let unmatchedCount = 0;
-            const processed = amazonOrderData.map(order => {
-                const matchResult = findTrackingNumber(order, trackingMap);
-                
-                if (!matchResult) {
-                    unmatchedCount++;
+            // ハイフン、スペース、括弧を除去
+            let normalized = phone.replace(/[-\s()]/g, '');
+            
+            // 先頭が0でない場合は0を追加
+            if (normalized && !normalized.startsWith('0') && !normalized.startsWith('+')) {
+                normalized = '0' + normalized;
+            }
+            
+            return normalized;
+        }
+
+        // Amazon注文レポートの解析
+        function parseAmazonReport(content) {
+            console.log('Amazon注文レポートを解析中...');
+            const lines = content.split('\n').filter(line => line.trim());
+            if (lines.length === 0) return [];
+
+            const headers = lines[0].split('\t');
+            console.log('ヘッダー数:', headers.length);
+            console.log('主要ヘッダー:', headers.slice(0, 15));
+
+            // 重要なフィールドのインデックスを取得
+            const indices = {
+                orderId: headers.indexOf('order-id'),
+                buyerPhone: headers.indexOf('buyer-phone-number'),
+                recipientName: headers.indexOf('recipient-name'),
+                shipAddress1: headers.indexOf('ship-address-1'),
+                shipAddress2: headers.indexOf('ship-address-2'),
+                shipAddress3: headers.indexOf('ship-address-3'),
+                shipCity: headers.indexOf('ship-city'),
+                shipState: headers.indexOf('ship-state'),
+                shipPostalCode: headers.indexOf('ship-postal-code')
+            };
+
+            console.log('フィールドインデックス:', indices);
+
+            // 必須フィールドの存在確認
+            const missingFields = Object.entries(indices)
+                .filter(([key, index]) => index === -1)
+                .map(([key]) => key);
+
+            if (missingFields.length > 0) {
+                console.warn('見つからないフィールド:', missingFields);
+            }
+
+            const orders = [];
+            for (let i = 1; i < lines.length; i++) {
+                const fields = lines[i].split('\t');
+                if (fields.length < Math.max(...Object.values(indices).filter(idx => idx !== -1))) {
+                    console.warn(`行${i+1}: フィールド数が不足 (${fields.length})`);
+                    continue;
                 }
 
-                return {
-                    'order-id': order['order-id'] || '',
-                    'order-item-id': order['order-item-id'] || '',
-                    'quantity': order['quantity-purchased'] || '',
-                    'ship-date': formatShipDate(new Date().toISOString().split('T')[0]),
-                    'carrier-code': getCarrierCode(order['ssa-carrier']),
-                    'carrier-name': getCarrierName(order['ssa-carrier']),
-                    'tracking-number': matchResult ? matchResult.trackingNumber : '',
-                    'ship-method': '',
-                    'cod-collection-method': '',
-                    'transparency_code': '',
-                    'ship_from_address_name': '',
-                    'ship_from_address_line1': '',
-                    'ship_from_address_line2': '',
-                    'ship_from_address_line3': '',
-                    'ship_from_address_city': '',
-                    'ship_from_address_county': '',
-                    'ship_from_address_state_or_region': '',
-                    'ship_from_address_postalcode': '',
-                    'ship_from_address_countrycode': ''
+                const order = {
+                    orderId: fields[indices.orderId] || '',
+                    buyerPhone: normalizePhoneNumber(fields[indices.buyerPhone] || ''),
+                    recipientName: (fields[indices.recipientName] || '').trim(),
+                    shipAddress1: (fields[indices.shipAddress1] || '').trim(),
+                    shipAddress2: (fields[indices.shipAddress2] || '').trim(),
+                    shipAddress3: (fields[indices.shipAddress3] || '').trim(),
+                    shipCity: (fields[indices.shipCity] || '').trim(),
+                    shipState: (fields[indices.shipState] || '').trim(),
+                    shipPostalCode: (fields[indices.shipPostalCode] || '').trim()
                 };
-            });
 
-            processedData = processed;
-            
-            // 未マッチの警告表示
-            if (unmatchedCount > 0) {
-                alert(`⚠️ ${unmatchedCount}件の注文で追跡番号が見つかりませんでした。\n手動で追跡番号を入力するか、追跡番号CSVを確認してください。`);
-            }
-            
-            displayPreview(processed);
-            
-            // ダウンロードボタンを有効化
-            document.getElementById('download-btn').disabled = false;
-        }
-
-        // 追跡番号マップを構築
-        function buildTrackingMap() {
-            const phoneMap = {};
-            const nameAddressMap = {};
-            
-            console.log('追跡番号マップ構築開始:', trackingData.length, '件');
-            
-            trackingData.forEach((row, index) => {
-                const trackingNumber = row[3]; // D列：追跡番号
-                const phone = row[8]; // I列：電話番号
-                const address1 = row[11] || ''; // L列：住所1
-                const address2 = row[12] || ''; // M列：住所2
-                const name = row[15] || ''; // P列：名前
-                
-                if (index < 5) {
-                    console.log(`CSVデータ ${index + 1}:`, {
-                        trackingNumber,
-                        phone: `"${phone}" (${phone ? phone.length : 0}桁)`,
-                        name: `"${name}"`,
-                        address1: `"${address1}"`
+                // デバッグ用: 最初の5件の詳細を表示
+                if (i <= 5) {
+                    console.log(`注文${i}:`, {
+                        orderId: order.orderId,
+                        phone: order.buyerPhone,
+                        name: order.recipientName,
+                        address: order.shipAddress1
                     });
                 }
-                
-                // 電話番号マップ
-                if (phone && phone !== '0' && trackingNumber) {
-                    const normalizedPhone = normalizePhone(phone);
-                    if (normalizedPhone) {
-                        phoneMap[normalizedPhone] = trackingNumber;
-                        if (index < 5) {
-                            console.log(`  電話番号マップ: "${phone}" → "${normalizedPhone}" → ${trackingNumber}`);
-                        }
-                    } else if (index < 5) {
-                        console.log(`  電話番号正規化失敗: "${phone}"`);
-                    }
+
+                // 基本情報があるもののみ追加
+                if (order.orderId && (order.buyerPhone || order.recipientName)) {
+                    orders.push(order);
                 }
-                
-                // 名前+住所マップ
-                if (name && (address1 || address2) && trackingNumber) {
-                    const fullAddress = normalizeAddress(address1 + address2);
-                    const nameAddressKey = `${name.trim()}|${fullAddress}`;
-                    nameAddressMap[nameAddressKey] = trackingNumber;
-                    if (index < 3) {
-                        console.log(`  名前+住所マップ: "${nameAddressKey}" → ${trackingNumber}`);
-                    }
-                }
-            });
-            
-            console.log('マップ構築完了:', {
-                phoneMapSize: Object.keys(phoneMap).length,
-                nameAddressMapSize: Object.keys(nameAddressMap).length
-            });
-            
-            // 電話番号マップのサンプルを表示
-            const phoneMapEntries = Object.entries(phoneMap).slice(0, 5);
-            console.log('電話番号マップサンプル:', phoneMapEntries);
-            
-            return { phoneMap, nameAddressMap };
+            }
+
+            console.log(`${orders.length}件の注文を解析しました`);
+            return orders;
         }
 
-        // 追跡番号を検索
-        function findTrackingNumber(order, trackingMap) {
-            // 1. 電話番号マッチング（最優先）
-            const shipPhone = order['ship-phone-number']; // Amazon注文レポートのship-phone-numberフィールド
-            const normalizedShipPhone = normalizePhone(shipPhone);
+        // 追跡番号CSVの解析
+        function parseTrackingCSV(content) {
+            console.log('追跡番号CSVを解析中...');
             
-            console.log(`注文 ${order['order-id']}: ship-phone-number="${shipPhone}" → normalized="${normalizedShipPhone}"`);
-            
-            if (normalizedShipPhone && trackingMap.phoneMap[normalizedShipPhone]) {
-                console.log(`  ✅ 電話番号一致: ${normalizedShipPhone} → 追跡番号 ${trackingMap.phoneMap[normalizedShipPhone]}`);
-                return {
-                    trackingNumber: trackingMap.phoneMap[normalizedShipPhone],
-                    matchType: 'phone'
+            const result = Papa.parse(content, {
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                delimitersToGuess: [',', '\t', '|', ';']
+            });
+
+            if (result.errors.length > 0) {
+                console.warn('CSV解析警告:', result.errors);
+            }
+
+            const data = result.data;
+            if (data.length === 0) return [];
+
+            console.log('CSV解析結果:', data.slice(0, 3));
+
+            const trackingList = [];
+            for (let i = 0; i < data.length; i++) {
+                const row = data[i];
+                if (!row || row.length < 16) continue;
+
+                const tracking = {
+                    trackingNumber: String(row[3] || '').trim(), // D列
+                    phone: normalizePhoneNumber(String(row[8] || '')), // I列
+                    address1: String(row[11] || '').trim(), // L列
+                    address2: String(row[12] || '').trim(), // M列
+                    name: String(row[15] || '').trim() // P列
                 };
-            }
-            
-            // 2. 名前+住所マッチング
-            const name = (order['recipient-name'] || '').trim();
-            const address = normalizeAddress(
-                (order['ship-address-1'] || '') + 
-                (order['ship-address-2'] || '') + 
-                (order['ship-city'] || '')
-            );
-            
-            console.log(`  受取人名: "${name}", 住所: "${address}"`);
-            
-            if (name && address) {
-                const nameAddressKey = `${name}|${address}`;
-                if (trackingMap.nameAddressMap[nameAddressKey]) {
-                    console.log(`  ✅ 名前+住所一致: ${nameAddressKey} → 追跡番号 ${trackingMap.nameAddressMap[nameAddressKey]}`);
-                    return {
-                        trackingNumber: trackingMap.nameAddressMap[nameAddressKey],
-                        matchType: 'name-address'
-                    };
+
+                // デバッグ用: 最初の5件の詳細を表示
+                if (i < 5) {
+                    console.log(`追跡${i+1}:`, tracking);
                 }
-                
-                // 3. あいまい一致
-                const fuzzyResult = fuzzyMatch(name, address, trackingMap.nameAddressMap);
-                if (fuzzyResult) {
-                    console.log(`  ⚠️ あいまい一致: → 追跡番号 ${fuzzyResult.trackingNumber}`);
-                    return fuzzyResult;
+
+                // 追跡番号があるもののみ追加
+                if (tracking.trackingNumber) {
+                    trackingList.push(tracking);
                 }
             }
-            
-            console.log(`  ❌ 一致なし`);
-            return null;
+
+            console.log(`${trackingList.length}件の追跡情報を解析しました`);
+            return trackingList;
         }
 
-        // 電話番号正規化
-        function normalizePhone(phone) {
-            if (!phone || phone === '0') return null;
-            
-            // ハイフン・スペース削除
-            let normalized = phone.replace(/[-\s]/g, '');
-            
-            // 数字のみかチェック
-            if (!/^\d+$/.test(normalized)) return null;
-            
-            // 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
-            if (normalized.length === 9 && !normalized.startsWith('0')) {
-                normalized = '0' + normalized;
-            }
-            
-            // 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
-            if (normalized.length === 10 && !normalized.startsWith('0')) {
-                normalized = '0' + normalized;
-            }
-            
-            // 11桁で先頭が0の場合はそのまま（携帯電話）
-            if (normalized.length === 11 && normalized.startsWith('0')) {
-                return normalized;
-            }
-            
-            // 10桁で先頭が0の場合もそのまま（固定電話）
-            if (normalized.length === 10 && normalized.startsWith('0')) {
-                return normalized;
-            }
-            
-            console.log(`電話番号正規化失敗: "${phone}" → "${normalized}" (${normalized.length}桁)`);
-            return null;
-        }
-
-        // 住所正規化
-        function normalizeAddress(address) {
-            return address
-                .replace(/\s+/g, '') // 空白除去
-                .replace(/[０-９]/g, (s) => // 全角数字→半角
-                    String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-                .toLowerCase();
-        }
-
-        // あいまいマッチング
-        function fuzzyMatch(targetName, targetAddress, nameAddressMap) {
-            let bestMatch = null;
-            let bestScore = 0;
-            
-            for (const [key, trackingNumber] of Object.entries(nameAddressMap)) {
-                const [name, address] = key.split('|');
-                const nameScore = calculateSimilarity(targetName, name);
-                const addressScore = calculateSimilarity(targetAddress, address);
-                const totalScore = (nameScore + addressScore) / 2;
-                
-                if (totalScore > 0.8 && totalScore > bestScore) {
-                    bestMatch = trackingNumber;
-                    bestScore = totalScore;
-                }
-            }
-            
-            return bestMatch ? {
-                trackingNumber: bestMatch,
-                matchType: 'fuzzy'
-            } : null;
-        }
-
-        // 文字列類似度計算（簡易版）
+        // 文字列類似度計算（Jaro-Winkler距離の簡易版）
         function calculateSimilarity(str1, str2) {
-            if (str1 === str2) return 1;
             if (!str1 || !str2) return 0;
-            
-            const longer = str1.length > str2.length ? str1 : str2;
-            const shorter = str1.length > str2.length ? str2 : str1;
-            
-            if (longer.length === 0) return 1;
-            
-            const distance = levenshteinDistance(longer, shorter);
-            return (longer.length - distance) / longer.length;
+            if (str1 === str2) return 1;
+
+            const len1 = str1.length;
+            const len2 = str2.length;
+            const maxDistance = Math.floor(Math.max(len1, len2) / 2) - 1;
+
+            let matches = 0;
+            const str1Matches = new Array(len1).fill(false);
+            const str2Matches = new Array(len2).fill(false);
+
+            // マッチする文字を見つける
+            for (let i = 0; i < len1; i++) {
+                const start = Math.max(0, i - maxDistance);
+                const end = Math.min(i + maxDistance + 1, len2);
+
+                for (let j = start; j < end; j++) {
+                    if (str2Matches[j] || str1[i] !== str2[j]) continue;
+                    str1Matches[i] = true;
+                    str2Matches[j] = true;
+                    matches++;
+                    break;
+                }
+            }
+
+            if (matches === 0) return 0;
+
+            // 転置の計算
+            let transpositions = 0;
+            let k = 0;
+            for (let i = 0; i < len1; i++) {
+                if (!str1Matches[i]) continue;
+                while (!str2Matches[k]) k++;
+                if (str1[i] !== str2[k]) transpositions++;
+                k++;
+            }
+
+            const jaro = (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
+            return jaro;
         }
 
-        // レーベンシュタイン距離
-        function levenshteinDistance(str1, str2) {
-            const matrix = [];
+        // 配送業者コードの決定
+        function getCarrierCode(trackingNumber) {
+            if (!trackingNumber) return 'YAMATO';
+
+            const tracking = trackingNumber.toString();
             
-            for (let i = 0; i <= str2.length; i++) {
-                matrix[i] = [i];
+            // ヤマト運輸のパターン
+            if (/^\d{12}$/.test(tracking) || /^\d{11}$/.test(tracking)) {
+                return 'YAMATO';
             }
             
-            for (let j = 0; j <= str1.length; j++) {
-                matrix[0][j] = j;
+            // 佐川急便のパターン
+            if (/^\d{11,12}$/.test(tracking) && tracking.startsWith('0')) {
+                return 'SAGAWA';
             }
             
-            for (let i = 1; i <= str2.length; i++) {
-                for (let j = 1; j <= str1.length; j++) {
-                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                        matrix[i][j] = matrix[i - 1][j - 1];
-                    } else {
-                        matrix[i][j] = Math.min(
-                            matrix[i - 1][j - 1] + 1,
-                            matrix[i][j - 1] + 1,
-                            matrix[i - 1][j] + 1
-                        );
+            // 日本郵便のパターン
+            if (/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(tracking)) {
+                return 'Japan Post';
+            }
+            
+            // フェデックスのパターン
+            if (/^\d{14}$/.test(tracking) || /^\d{20}$/.test(tracking)) {
+                return 'FEDEX';
+            }
+
+            // デフォルトはヤマト運輸
+            return 'YAMATO';
+        }
+
+        // データマッチング処理
+        function matchData() {
+            console.log('データマッチングを開始...');
+            
+            const matches = {
+                phoneExact: 0,
+                phoneNormalized: 0,
+                nameAddress: 0,
+                fuzzy: 0,
+                unmatched: 0
+            };
+
+            const matchedOrders = [];
+
+            for (const order of amazonOrders) {
+                let bestMatch = null;
+                let matchType = 'unmatched';
+
+                // 1. 電話番号での完全一致
+                if (order.buyerPhone) {
+                    bestMatch = trackingData.find(track => 
+                        track.phone && track.phone === order.buyerPhone
+                    );
+                    if (bestMatch) {
+                        matchType = 'phoneExact';
+                        matches.phoneExact++;
                     }
                 }
-            }
-            
-            return matrix[str2.length][str1.length];
-        }
 
-        // 出荷日をフォーマット
-        function formatShipDate(dateStr) {
-            if (!dateStr) return new Date().toISOString().split('T')[0];
-            
-            // 既にYYYY-MM-DD形式の場合はそのまま返す
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-                return dateStr;
-            }
-            
-            // その他の形式は今日の日付を使用
-            return new Date().toISOString().split('T')[0];
-        }
+                // 2. 電話番号の正規化一致
+                if (!bestMatch && order.buyerPhone) {
+                    const normalizedOrderPhone = normalizePhoneNumber(order.buyerPhone);
+                    bestMatch = trackingData.find(track => {
+                        const normalizedTrackPhone = normalizePhoneNumber(track.phone);
+                        return normalizedTrackPhone && normalizedTrackPhone === normalizedOrderPhone;
+                    });
+                    if (bestMatch) {
+                        matchType = 'phoneNormalized';
+                        matches.phoneNormalized++;
+                    }
+                }
 
-        // 配送業者コードを取得
-        function getCarrierCode(carrierInfo) {
-            if (!carrierInfo) return 'YAMATO';
-            
-            if (carrierInfo.includes('ヤマト') || carrierInfo.includes('YAMATO')) return 'YAMATO';
-            if (carrierInfo.includes('佐川') || carrierInfo.includes('SAGAWA')) return 'SAGAWA';
-            if (carrierInfo.includes('郵便') || carrierInfo.includes('Japan Post')) return 'Japan Post';
-            if (carrierInfo.includes('フェデックス') || carrierInfo.includes('FEDEX')) return 'FEDEX';
-            
-            return 'YAMATO'; // デフォルト
-        }
+                // 3. 名前＋住所での一致
+                if (!bestMatch && order.recipientName && order.shipAddress1) {
+                    bestMatch = trackingData.find(track => 
+                        track.name && track.address1 &&
+                        track.name.includes(order.recipientName.replace(/\s/g, '')) &&
+                        track.address1.includes(order.shipAddress1.replace(/\s/g, ''))
+                    );
+                    if (bestMatch) {
+                        matchType = 'nameAddress';
+                        matches.nameAddress++;
+                    }
+                }
 
-        // 配送業者名を取得
-        function getCarrierName(carrierInfo) {
-            if (!carrierInfo) return 'ヤマト運輸';
-            
-            if (carrierInfo.includes('ヤマト') || carrierInfo.includes('YAMATO')) return 'ヤマト運輸';
-            if (carrierInfo.includes('佐川') || carrierInfo.includes('SAGAWA')) return '佐川急便';
-            if (carrierInfo.includes('郵便') || carrierInfo.includes('Japan Post')) return '日本郵便';
-            if (carrierInfo.includes('フェデックス') || carrierInfo.includes('FEDEX')) return 'フェデックス';
-            
-            return 'ヤマト運輸'; // デフォルト
-        }
+                // 4. あいまいマッチング（類似度80%以上）
+                if (!bestMatch && order.recipientName) {
+                    let maxSimilarity = 0;
+                    let fuzzyMatch = null;
 
-        // プレビューを表示
-        function displayPreview(data) {
-            const previewSection = document.getElementById('preview-section');
-            const tbody = document.getElementById('preview-tbody');
-            const moreRows = document.getElementById('more-rows');
-            
-            // テーブルクリア
-            tbody.innerHTML = '';
-            
-            // 最初の5行を表示
-            const displayData = data.slice(0, 5);
-            displayData.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-t';
-                tr.innerHTML = `
-                    <td class="px-3 py-2">${row['order-id']}</td>
-                    <td class="px-3 py-2">${row['ship-date']}</td>
-                    <td class="px-3 py-2">${row['carrier-code']}</td>
-                    <td class="px-3 py-2">${row['carrier-name']}</td>
-                    <td class="px-3 py-2">${row['tracking-number']}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-            
-            // 残り行数表示
-            if (data.length > 5) {
-                moreRows.textContent = `他 ${data.length - 5} 行...`;
-                moreRows.style.display = 'block';
-            } else {
-                moreRows.style.display = 'none';
-            }
-            
-            previewSection.style.display = 'block';
-        }
+                    for (const track of trackingData) {
+                        if (!track.name) continue;
+                        
+                        const similarity = calculateSimilarity(
+                            order.recipientName.replace(/\s/g, ''),
+                            track.name.replace(/\s/g, '')
+                        );
 
-        // TXTファイルをダウンロード
-        function downloadTxt() {
-            if (processedData.length === 0) {
-                alert('データを先に処理してください');
-                return;
+                        if (similarity > maxSimilarity && similarity >= 0.8) {
+                            maxSimilarity = similarity;
+                            fuzzyMatch = track;
+                        }
+                    }
+
+                    if (fuzzyMatch) {
+                        bestMatch = fuzzyMatch;
+                        matchType = 'fuzzy';
+                        matches.fuzzy++;
+                    }
+                }
+
+                // マッチしなかった場合
+                if (!bestMatch) {
+                    matches.unmatched++;
+                }
+
+                // 結果を記録
+                matchedOrders.push({
+                    order,
+                    tracking: bestMatch,
+                    matchType,
+                    carrierCode: bestMatch ? getCarrierCode(bestMatch.trackingNumber) : 'YAMATO'
+                });
             }
 
-            // ヘッダー行を作成
+            console.log('マッチング結果:', matches);
+            return { matchedOrders, matches };
+        }
+
+        // 出荷通知ファイルの生成
+        function generateShippingFile(matchedOrders) {
+            console.log('出荷通知ファイルを生成中...');
+
             const headers = [
-                'TemplateType=OrderFulfillment',
-                'Version=2011.1102',
-                'この行はAmazonが使用しますので変更や削除しないでください。'
-            ];
-
-            const columnHeaders = [
-                '注文番号', '注文商品番号', '出荷数', '出荷日', '配送業者コード', '配送業者名',
-                'お問い合わせ伝票番号', '配送方法', '代金引換', '製品が透明に登録されている場合の製品の透明コード。',
-                '出荷元住所-名称', '出荷元住所-行 1', '出荷元住所-行 2', '出荷元住所-行 3',
-                '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', '出荷元住所-郵便番号',
-                '出荷元住所-国コード'
-            ];
-
-            const columnIds = [
                 'order-id', 'order-item-id', 'quantity', 'ship-date', 'carrier-code', 'carrier-name',
-                'tracking-number', 'ship-method', 'cod-collection-method', 'transparency_code',
-                'ship_from_address_name', 'ship_from_address_line1', 'ship_from_address_line2',
-                'ship_from_address_line3', 'ship_from_address_city', 'ship_from_address_county',
-                'ship_from_address_state_or_region', 'ship_from_address_postalcode', 'ship_from_address_countrycode'
+                'tracking-number', 'ship-method'
             ];
 
-            // データ行を作成
-            const dataRows = processedData.map(row => 
-                columnIds.map(id => row[id] || '').join('\t')
-            );
+            const rows = [headers];
 
-            // 全ての行を結合
-            const content = [
-                headers.join('\t'),
-                columnHeaders.join('\t'),
-                columnIds.join('\t'),
-                ...dataRows
-            ].join('\n');
+            for (const match of matchedOrders) {
+                if (!match.tracking) continue; // マッチしなかったものはスキップ
 
-            // ファイルをダウンロード
-            const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
+                const today = new Date().toISOString().split('T')[0];
+                
+                rows.push([
+                    match.order.orderId,
+                    '', // order-item-id は空
+                    '1', // quantity
+                    today,
+                    match.carrierCode,
+                    getCarrierName(match.carrierCode),
+                    match.tracking.trackingNumber,
+                    'Standard'
+                ]);
+            }
+
+            // TSV形式で出力
+            const tsvContent = rows.map(row => row.join('\t')).join('\n');
+            
+            // ファイルダウンロード
+            const blob = new Blob([tsvContent], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -677,6 +600,134 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+
+            return rows.length - 1; // ヘッダーを除いた件数
+        }
+
+        // 配送業者名の取得
+        function getCarrierName(carrierCode) {
+            const carriers = {
+                'YAMATO': 'ヤマト運輸',
+                'SAGAWA': '佐川急便',
+                'Japan Post': '日本郵便',
+                'FEDEX': 'フェデックス'
+            };
+            return carriers[carrierCode] || 'ヤマト運輸';
+        }
+
+        // 処理ボタンの状態更新
+        function updateProcessButton() {
+            const button = document.getElementById('process-btn');
+            const canProcess = templateData && amazonOrders.length > 0 && trackingData.length > 0;
+            
+            button.disabled = !canProcess;
+            if (canProcess) {
+                button.className = 'bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-colors';
+            } else {
+                button.className = 'bg-gray-400 text-white font-bold py-3 px-8 rounded-lg cursor-not-allowed';
+            }
+        }
+
+        // 進行状況の更新
+        function updateProgress(percent, message) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            
+            if (progressBar) progressBar.style.width = `${percent}%`;
+            if (progressText) progressText.textContent = message;
+        }
+
+        // エラー表示
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            const errorText = document.getElementById('error-text');
+            
+            errorText.textContent = message;
+            errorDiv.classList.remove('hidden');
+            
+            // 5秒後に自動的に隠す
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // 結果表示
+        function showResults(matchedCount, totalCount, matches) {
+            const resultsDiv = document.getElementById('results');
+            const summaryDiv = document.getElementById('results-summary');
+            const detailsDiv = document.getElementById('matching-details');
+
+            summaryDiv.innerHTML = `
+                <p class="font-semibold">出荷通知ファイルを生成しました</p>
+                <p>${matchedCount}件 / ${totalCount}件 の注文がマッチしました</p>
+            `;
+
+            detailsDiv.innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center p-2 bg-green-100 rounded">
+                        <div class="font-bold text-green-800">${matches.phoneExact}</div>
+                        <div class="text-xs text-green-600">電話番号完全一致</div>
+                    </div>
+                    <div class="text-center p-2 bg-blue-100 rounded">
+                        <div class="font-bold text-blue-800">${matches.phoneNormalized}</div>
+                        <div class="text-xs text-blue-600">電話番号正規化一致</div>
+                    </div>
+                    <div class="text-center p-2 bg-yellow-100 rounded">
+                        <div class="font-bold text-yellow-800">${matches.nameAddress}</div>
+                        <div class="text-xs text-yellow-600">名前+住所一致</div>
+                    </div>
+                    <div class="text-center p-2 bg-purple-100 rounded">
+                        <div class="font-bold text-purple-800">${matches.fuzzy}</div>
+                        <div class="text-xs text-purple-600">あいまい一致</div>
+                    </div>
+                </div>
+                <div class="mt-2 text-center">
+                    <span class="text-red-600 font-medium">未マッチ: ${matches.unmatched}件</span>
+                </div>
+            `;
+
+            resultsDiv.classList.remove('hidden');
+        }
+
+        // メインの処理関数
+        async function processData() {
+            try {
+                // UI更新
+                const progressArea = document.getElementById('progress-area');
+                const resultsDiv = document.getElementById('results');
+                const errorDiv = document.getElementById('error-message');
+                
+                progressArea.classList.remove('hidden');
+                resultsDiv.classList.add('hidden');
+                errorDiv.classList.add('hidden');
+
+                // 処理開始
+                updateProgress(10, 'データマッチングを開始しています...');
+                
+                // データマッチング
+                await new Promise(resolve => setTimeout(resolve, 500)); // UI更新のための短い遅延
+                const { matchedOrders, matches } = matchData();
+                
+                updateProgress(60, 'マッチング完了。出荷通知ファイルを生成中...');
+                
+                // 出荷通知ファイル生成
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const generatedCount = generateShippingFile(matchedOrders);
+                
+                updateProgress(100, '処理完了');
+                
+                // 結果表示
+                setTimeout(() => {
+                    progressArea.classList.add('hidden');
+                    showResults(generatedCount, amazonOrders.length, matches);
+                    updateStep(3, true);
+                }, 1000);
+                
+            } catch (error) {
+                console.error('処理エラー:', error);
+                document.getElementById('progress-area').classList.add('hidden');
+                showError(`処理中にエラーが発生しました: ${error.message}`);
+            }
         }
     </script>
 </body>
