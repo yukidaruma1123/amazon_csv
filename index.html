@@ -49,6 +49,7 @@
                                 type="file"
                                 id="csv-upload"
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                accept=".csv"
                             />
                             <label
                                 for="csv-upload"
@@ -143,8 +144,22 @@
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM Content Loaded');
             loadTemplateFile();
             setupEventListeners();
+            
+            // イベントリスナーが正しく設定されているか確認
+            const csvUpload = document.getElementById('csv-upload');
+            const txtUpload = document.getElementById('txt-upload');
+            
+            console.log('CSV upload element:', csvUpload);
+            console.log('TXT upload element:', txtUpload);
+            
+            if (csvUpload) {
+                console.log('CSV upload element found, adding event listener');
+            } else {
+                console.error('CSV upload element not found!');
+            }
         });
 
         // イベントリスナー設定
@@ -208,10 +223,17 @@
 
         // 追跡番号ファイルを読み込む
         async function handleCsvUpload(event) {
+            console.log('CSV upload triggered:', event);
             const file = event.target.files[0];
-            if (!file) return;
+            console.log('Selected file:', file);
+            
+            if (!file) {
+                console.log('No file selected');
+                return;
+            }
 
             document.getElementById('csv-file-name').textContent = file.name;
+            console.log('File name set to:', file.name);
 
             try {
                 // Shift_JISエンコーディングでファイルを読み込む
@@ -231,6 +253,7 @@
                 
                 checkProcessButtonState();
             } catch (error) {
+                console.error('CSV読み込みエラー:', error);
                 alert('追跡番号ファイルの読み込みに失敗しました: ' + error.message);
             }
         }
