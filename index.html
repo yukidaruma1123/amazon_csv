@@ -341,18 +341,33 @@
             const phoneMap = {};
             const nameAddressMap = {};
             
-            trackingData.forEach(row => {
+            console.log('追跡番号マップ構築開始:', trackingData.length, '件');
+            
+            trackingData.forEach((row, index) => {
                 const trackingNumber = row[3]; // D列：追跡番号
                 const phone = row[8]; // I列：電話番号
                 const address1 = row[11] || ''; // L列：住所1
                 const address2 = row[12] || ''; // M列：住所2
                 const name = row[15] || ''; // P列：名前
                 
+                if (index < 3) {
+                    console.log(`CSVデータ ${index + 1}:`, {
+                        trackingNumber,
+                        phone,
+                        address1,
+                        address2,
+                        name
+                    });
+                }
+                
                 // 電話番号マップ
                 if (phone && phone !== '0' && trackingNumber) {
                     const normalizedPhone = normalizePhone(phone);
                     if (normalizedPhone) {
                         phoneMap[normalizedPhone] = trackingNumber;
+                        if (index < 3) {
+                            console.log(`  電話番号マップ: ${phone} → ${normalizedPhone} → ${trackingNumber}`);
+                        }
                     }
                 }
                 
@@ -361,19 +376,35 @@
                     const fullAddress = normalizeAddress(address1 + address2);
                     const nameAddressKey = `${name.trim()}|${fullAddress}`;
                     nameAddressMap[nameAddressKey] = trackingNumber;
+                    if (index < 3) {
+                        console.log(`  名前+住所マップ: ${nameAddressKey} → ${trackingNumber}`);
+                    }
                 }
             });
+            
+            console.log('マップ構築完了:', {
+                phoneMapSize: Object.keys(phoneMap).length,
+                nameAddressMapSize: Object.keys(nameAddressMap).length
+            });
+            
+            // 電話番号マップのサンプルを表示
+            console.log('電話番号マップサンプル:', Object.entries(phoneMap).slice(0, 3));
             
             return { phoneMap, nameAddressMap };
         }
 
         // 追跡番号を検索
         function findTrackingNumber(order, trackingMap) {
-            // 1. 電話番号マッチング（優先）
-            const phone = normalizePhone(order['ship-phone-number']);
-            if (phone && trackingMap.phoneMap[phone]) {
+            // 1. 電話番号マッチング（最優先）
+            const shipPhone = order['ship-phone-number']; // Amazon注文レポートのship-phone-numberフィールド
+            const normalizedShipPhone = normalizePhone(shipPhone);
+            
+            console.log(`注文 ${order['order-id']}: ship-phone-number="${shipPhone}" → normalized="${normalizedShipPhone}"`);
+            
+            if (normalizedShipPhone && trackingMap.phoneMap[normalizedShipPhone]) {
+                console.log(`  ✅ 電話番号一致: ${normalizedShipPhone} → 追跡番号 ${trackingMap.phoneMap[normalizedShipPhone]}`);
                 return {
-                    trackingNumber: trackingMap.phoneMap[phone],
+                    trackingNumber: trackingMap.phoneMap[normalizedShipPhone],
                     matchType: 'phone'
                 };
             }
@@ -386,9 +417,12 @@
                 (order['ship-city'] || '')
             );
             
+            console.log(`  受取人名: "${name}", 住所: "${address}"`);
+            
             if (name && address) {
                 const nameAddressKey = `${name}|${address}`;
                 if (trackingMap.nameAddressMap[nameAddressKey]) {
+                    console.log(`  ✅ 名前+住所一致: ${nameAddressKey} → 追跡番号 ${trackingMap.nameAddressMap[nameAddressKey]}`);
                     return {
                         trackingNumber: trackingMap.nameAddressMap[nameAddressKey],
                         matchType: 'name-address'
@@ -396,9 +430,14 @@
                 }
                 
                 // 3. あいまい一致
-                return fuzzyMatch(name, address, trackingMap.nameAddressMap);
+                const fuzzyResult = fuzzyMatch(name, address, trackingMap.nameAddressMap);
+                if (fuzzyResult) {
+                    console.log(`  ⚠️ あいまい一致: → 追跡番号 ${fuzzyResult.trackingNumber}`);
+                    return fuzzyResult;
+                }
             }
             
+            console.log(`  ❌ 一致なし`);
             return null;
         }
 
