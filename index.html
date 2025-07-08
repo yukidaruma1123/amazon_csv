@@ -19,10 +19,10 @@
             <div class="bg-white p-6 rounded-lg shadow">
                 <h2 class="text-lg font-semibold mb-4">ファイル読み込み</h2>
                 
-                <div class="grid grid-cols-1 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
-                            Amazon注文レポートTXTファイル
+                            注文レポートファイル
                         </label>
                         <div class="relative">
                             <input
@@ -34,13 +34,30 @@
                                 for="txt-upload"
                                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 cursor-pointer"
                             >
-                                ファイルを選択
+                                注文レポート選択
                             </label>
-                            <span id="file-name" class="ml-3 text-sm text-gray-500"></span>
+                            <span id="txt-file-name" class="ml-3 text-sm text-gray-500"></span>
                         </div>
-                        <p class="text-xs text-gray-500 mt-1">
-                            Amazonセラーセントラルからダウンロードした注文レポート（TXTファイル）をそのままアップロードしてください
-                        </p>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            追跡番号ファイル
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="file"
+                                id="csv-upload"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <label
+                                for="csv-upload"
+                                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 cursor-pointer"
+                            >
+                                追跡番号ファイル選択
+                            </label>
+                            <span id="csv-file-name" class="ml-3 text-sm text-gray-500"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -105,7 +122,7 @@
 
     <script>
         // グローバル変数
-        let amazonData = [];
+        let amazonOrderData = [];
         let trackingData = [];
         let templateData = [];
         let carrierList = [];
@@ -126,59 +143,15 @@
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, starting initialization...');
             loadTemplateFile();
-            
-            // DOM要素の存在を確認してからイベントリスナーを設定
-            setTimeout(() => {
-                console.log('Setting up event listeners...');
-                setupEventListeners();
-            }, 500);
+            setupEventListeners();
         });
 
         // イベントリスナー設定
         function setupEventListeners() {
-            console.log('Looking for DOM elements...');
-            
-            const txtUpload = document.getElementById('txt-upload');
-            const csvUpload = document.getElementById('csv-upload');
-            const processBtn = document.getElementById('process-btn');
-            const downloadBtn = document.getElementById('download-btn');
-
-            console.log('Elements found:', {
-                txtUpload: !!txtUpload,
-                csvUpload: !!csvUpload,
-                processBtn: !!processBtn,
-                downloadBtn: !!downloadBtn
-            });
-
-            if (txtUpload) {
-                txtUpload.addEventListener('change', handleTxtUpload);
-                console.log('txt-upload listener added');
-            } else {
-                console.error('txt-upload element not found');
-            }
-
-            if (csvUpload) {
-                csvUpload.addEventListener('change', handleCsvUpload);
-                console.log('csv-upload listener added');
-            } else {
-                console.error('csv-upload element not found');
-            }
-
-            if (processBtn) {
-                processBtn.addEventListener('click', processData);
-                console.log('process-btn listener added');
-            } else {
-                console.error('process-btn element not found');
-            }
-
-            if (downloadBtn) {
-                downloadBtn.addEventListener('click', downloadTxt);
-                console.log('download-btn listener added');
-            } else {
-                console.error('download-btn element not found');
-            }
+            document.getElementById('txt-upload').addEventListener('change', handleTxtUpload);
+            document.getElementById('process-btn').addEventListener('click', processData);
+            document.getElementById('download-btn').addEventListener('click', downloadTxt);
         }
 
         // テンプレートファイルを自動読み込み
@@ -208,7 +181,7 @@
             }
         }
 
-        // TXTファイルを読み込む（Amazon注文レポート）
+        // Amazon注文レポートファイルを読み込む
         async function handleTxtUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -224,19 +197,16 @@
                     encoding: 'UTF-8'
                 });
                 
-                amazonData = result.data;
-                console.log('Amazon注文レポート読み込み完了:', amazonData.length, '件');
+                amazonOrderData = result.data;
+                console.log('注文レポートファイル読み込み完了:', amazonOrderData.length, '件');
                 
-                // 両ファイルが読み込まれたら処理ボタンを有効化
-                if (amazonData.length > 0 && trackingData.length > 0) {
-                    document.getElementById('process-btn').disabled = false;
-                }
+                checkProcessButtonState();
             } catch (error) {
-                alert('TXTファイルの読み込みに失敗しました: ' + error.message);
+                alert('注文レポートファイルの読み込みに失敗しました: ' + error.message);
             }
         }
 
-        // CSVファイルを読み込む（追跡番号データ）
+        // 追跡番号ファイルを読み込む
         async function handleCsvUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -244,42 +214,53 @@
             document.getElementById('csv-file-name').textContent = file.name;
 
             try {
-                const fileContent = await file.text();
+                // Shift_JISエンコーディングでファイルを読み込む
+                const arrayBuffer = await file.arrayBuffer();
+                const decoder = new TextDecoder('shift_jis');
+                const fileContent = decoder.decode(arrayBuffer);
+                
                 const result = Papa.parse(fileContent, {
                     header: false,
                     skipEmptyLines: true,
                     delimiter: ',',
-                    encoding: 'UTF-8'
+                    encoding: 'shift_jis'
                 });
                 
                 trackingData = result.data;
-                console.log('追跡番号CSV読み込み完了:', trackingData.length, '件');
+                console.log('追跡番号ファイル読み込み完了:', trackingData.length, '件');
                 
-                // 両ファイルが読み込まれたら処理ボタンを有効化
-                if (amazonData.length > 0 && trackingData.length > 0) {
-                    document.getElementById('process-btn').disabled = false;
-                }
+                checkProcessButtonState();
             } catch (error) {
-                alert('CSVファイルの読み込みに失敗しました: ' + error.message);
+                alert('追跡番号ファイルの読み込みに失敗しました: ' + error.message);
             }
+        }
+
+        // 処理ボタンの状態をチェック
+        function checkProcessButtonState() {
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = !(amazonOrderData.length > 0 && trackingData.length > 0);
         }
 
         // データを処理して出荷通知ファイルを生成
         function processData() {
-            if (amazonData.length === 0 || trackingData.length === 0) {
-                alert('Amazon注文レポートと追跡番号CSVの両方をアップロードしてください');
+            if (amazonOrderData.length === 0) {
+                alert('注文レポートファイルを先に読み込んでください');
+                return;
+            }
+
+            if (trackingData.length === 0) {
+                alert('追跡番号ファイルを先に読み込んでください');
                 return;
             }
 
             // 追跡番号マップを作成
-            const trackingMap = buildTrackingMap(trackingData);
+            const trackingMap = buildTrackingMap();
+            
             let unmatchedCount = 0;
-
-            const processed = amazonData.map(order => {
-                // マッチング実行
-                const trackingResult = findTrackingNumber(order, trackingMap);
+            const processed = amazonOrderData.map(order => {
+                const matchResult = findTrackingNumber(order, trackingMap);
                 
-                if (!trackingResult) {
+                if (!matchResult) {
                     unmatchedCount++;
                 }
 
@@ -287,10 +268,10 @@
                     'order-id': order['order-id'] || '',
                     'order-item-id': order['order-item-id'] || '',
                     'quantity': order['quantity-purchased'] || '',
-                    'ship-date': new Date().toISOString().split('T')[0], // 今日の日付
+                    'ship-date': formatShipDate(new Date().toISOString().split('T')[0]),
                     'carrier-code': getCarrierCode(order['ssa-carrier']),
                     'carrier-name': getCarrierName(order['ssa-carrier']),
-                    'tracking-number': trackingResult || '',
+                    'tracking-number': matchResult ? matchResult.trackingNumber : '',
                     'ship-method': '',
                     'cod-collection-method': '',
                     'transparency_code': '',
@@ -307,29 +288,30 @@
             });
 
             processedData = processed;
-            displayPreview(processed);
             
             // 未マッチの警告表示
             if (unmatchedCount > 0) {
                 alert(`⚠️ ${unmatchedCount}件の注文で追跡番号が見つかりませんでした。\n手動で追跡番号を入力するか、追跡番号CSVを確認してください。`);
             }
             
+            displayPreview(processed);
+            
             // ダウンロードボタンを有効化
             document.getElementById('download-btn').disabled = false;
         }
 
         // 追跡番号マップを構築
-        function buildTrackingMap(trackingData) {
+        function buildTrackingMap() {
             const phoneMap = {};
             const nameAddressMap = {};
-
+            
             trackingData.forEach(row => {
                 const trackingNumber = row[3]; // D列：追跡番号
                 const phone = row[8]; // I列：電話番号
                 const address1 = row[11] || ''; // L列：住所1
                 const address2 = row[12] || ''; // M列：住所2
                 const name = row[15] || ''; // P列：名前
-
+                
                 // 電話番号マップ
                 if (phone && phone !== '0' && trackingNumber) {
                     const normalizedPhone = normalizePhone(phone);
@@ -337,49 +319,50 @@
                         phoneMap[normalizedPhone] = trackingNumber;
                     }
                 }
-
+                
                 // 名前+住所マップ
                 if (name && (address1 || address2) && trackingNumber) {
-                    const normalizedAddress = normalizeAddress(address1 + address2);
-                    const key = `${name.trim()}|${normalizedAddress}`;
-                    nameAddressMap[key] = trackingNumber;
+                    const fullAddress = normalizeAddress(address1 + address2);
+                    const nameAddressKey = `${name.trim()}|${fullAddress}`;
+                    nameAddressMap[nameAddressKey] = trackingNumber;
                 }
             });
-
+            
             return { phoneMap, nameAddressMap };
         }
 
         // 追跡番号を検索
         function findTrackingNumber(order, trackingMap) {
-            // 1. 電話番号でのマッチング
+            // 1. 電話番号マッチング（優先）
             const phone = normalizePhone(order['ship-phone-number']);
             if (phone && trackingMap.phoneMap[phone]) {
-                return trackingMap.phoneMap[phone];
+                return {
+                    trackingNumber: trackingMap.phoneMap[phone],
+                    matchType: 'phone'
+                };
             }
-
-            // 2. 名前+住所でのマッチング
+            
+            // 2. 名前+住所マッチング
             const name = (order['recipient-name'] || '').trim();
             const address = normalizeAddress(
                 (order['ship-address-1'] || '') + 
                 (order['ship-address-2'] || '') + 
                 (order['ship-city'] || '')
             );
-
+            
             if (name && address) {
-                const key = `${name}|${address}`;
-                if (trackingMap.nameAddressMap[key]) {
-                    return trackingMap.nameAddressMap[key];
+                const nameAddressKey = `${name}|${address}`;
+                if (trackingMap.nameAddressMap[nameAddressKey]) {
+                    return {
+                        trackingNumber: trackingMap.nameAddressMap[nameAddressKey],
+                        matchType: 'name-address'
+                    };
                 }
-
-                // 部分マッチも試行
-                for (const [mapKey, trackingNumber] of Object.entries(trackingMap.nameAddressMap)) {
-                    const [mapName, mapAddress] = mapKey.split('|');
-                    if (name === mapName && address.includes(mapAddress)) {
-                        return trackingNumber;
-                    }
-                }
+                
+                // 3. あいまい一致
+                return fuzzyMatch(name, address, trackingMap.nameAddressMap);
             }
-
+            
             return null;
         }
 
@@ -395,18 +378,95 @@
                 normalized = '0' + normalized;
             }
             
-            return normalized;
+            return normalized.length === 11 ? normalized : null;
         }
 
         // 住所正規化
         function normalizeAddress(address) {
-            if (!address) return '';
-            
             return address
                 .replace(/\s+/g, '') // 空白除去
                 .replace(/[０-９]/g, (s) => // 全角数字→半角
                     String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
                 .toLowerCase();
+        }
+
+        // あいまいマッチング
+        function fuzzyMatch(targetName, targetAddress, nameAddressMap) {
+            let bestMatch = null;
+            let bestScore = 0;
+            
+            for (const [key, trackingNumber] of Object.entries(nameAddressMap)) {
+                const [name, address] = key.split('|');
+                const nameScore = calculateSimilarity(targetName, name);
+                const addressScore = calculateSimilarity(targetAddress, address);
+                const totalScore = (nameScore + addressScore) / 2;
+                
+                if (totalScore > 0.8 && totalScore > bestScore) {
+                    bestMatch = trackingNumber;
+                    bestScore = totalScore;
+                }
+            }
+            
+            return bestMatch ? {
+                trackingNumber: bestMatch,
+                matchType: 'fuzzy'
+            } : null;
+        }
+
+        // 文字列類似度計算（簡易版）
+        function calculateSimilarity(str1, str2) {
+            if (str1 === str2) return 1;
+            if (!str1 || !str2) return 0;
+            
+            const longer = str1.length > str2.length ? str1 : str2;
+            const shorter = str1.length > str2.length ? str2 : str1;
+            
+            if (longer.length === 0) return 1;
+            
+            const distance = levenshteinDistance(longer, shorter);
+            return (longer.length - distance) / longer.length;
+        }
+
+        // レーベンシュタイン距離
+        function levenshteinDistance(str1, str2) {
+            const matrix = [];
+            
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            
+            return matrix[str2.length][str1.length];
+        }
+
+        // 出荷日をフォーマット
+        function formatShipDate(dateStr) {
+            if (!dateStr) return new Date().toISOString().split('T')[0];
+            
+            // 既にYYYY-MM-DD形式の場合はそのまま返す
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                return dateStr;
+            }
+            
+            // その他の形式は今日の日付を使用
+            return new Date().toISOString().split('T')[0];
         }
 
         // 配送業者コードを取得
