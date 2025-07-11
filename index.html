@@ -430,35 +430,30 @@
             return jaro;
         }
 
-        // 配送業者コードの決定（追跡番号形式の厳密チェック）
+        // 配送業者コードの決定
         function getCarrierCode(trackingNumber) {
             if (!trackingNumber) return 'YAMATO';
 
-            const tracking = trackingNumber.toString().replace(/[-\s]/g, '');
+            const tracking = trackingNumber.toString();
             
-            // ヤマト運輸: 12桁の数字（例：767076335325）
-            if (/^\d{12}$/.test(tracking)) {
+            // ヤマト運輸のパターン
+            if (/^\d{12}$/.test(tracking) || /^\d{11}$/.test(tracking)) {
                 return 'YAMATO';
             }
             
-            // 佐川急便: 10-12桁の数字
-            if (/^\d{10,12}$/.test(tracking) && !tracking.startsWith('7670')) {
+            // 佐川急便のパターン
+            if (/^\d{11,12}$/.test(tracking) && tracking.startsWith('0')) {
                 return 'SAGAWA';
             }
             
-            // 日本郵便: アルファベット2文字+数字9桁+アルファベット2文字
+            // 日本郵便のパターン
             if (/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(tracking)) {
                 return 'Japan Post';
             }
             
-            // フェデックス: 14桁または20桁の数字
+            // フェデックスのパターン
             if (/^\d{14}$/.test(tracking) || /^\d{20}$/.test(tracking)) {
                 return 'FEDEX';
-            }
-
-            // 数字のみで11桁の場合もヤマト運輸の可能性
-            if (/^\d{11}$/.test(tracking)) {
-                return 'YAMATO';
             }
 
             // デフォルトはヤマト運輸
@@ -600,17 +595,15 @@
                     match.carrierCode,
                     getCarrierName(match.carrierCode),
                     trackingNumber,
-                    'Standard' // ship-method を明示的に設定
+                    'Standard'
                 ]);
             }
 
-            // TSV形式で出力（UTF-8 BOM付き）
-            const tsvContent = '\ufeff' + rows.map(row => row.join('\t')).join('\r\n');
+            // TSV形式で出力
+            const tsvContent = rows.map(row => row.join('\t')).join('\n');
             
-            // ファイルダウンロード（UTF-8 BOM付き）
-            const blob = new Blob([tsvContent], { 
-                type: 'text/plain;charset=utf-8-sig' 
-            });
+            // ファイルダウンロード
+            const blob = new Blob([tsvContent], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
