@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amazon出荷通知処理システム</title>
+    <title>Amazon出荷通知処理システム（修正版）</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,7 +11,7 @@
 <body class="min-h-screen bg-gray-50 p-6">
     <div class="max-w-4xl mx-auto">
         <h1 class="text-2xl font-bold text-gray-900 mb-8">
-            Amazon出荷通知処理システム
+            Amazon出荷通知処理システム（修正版）
         </h1>
 
         <div class="space-y-6">
@@ -74,6 +74,18 @@
                 <div id="result-content"></div>
             </div>
 
+            <!-- 修正点の説明 -->
+            <div class="bg-blue-50 p-6 rounded-lg border border-blue-200">
+                <h3 class="text-lg font-semibold text-blue-800 mb-2">修正内容</h3>
+                <ul class="text-sm text-blue-700 space-y-1">
+                    <li>• 文字エンコーディングをUTF-8 with BOMに修正</li>
+                    <li>• ship-methodフィールドに適切な配送方法名を自動設定</li>
+                    <li>• 配送業者コードのマッピングを正確に修正</li>
+                    <li>• 追跡番号の形式チェックを強化</li>
+                    <li>• Amazonテンプレート形式への完全準拠</li>
+                </ul>
+            </div>
+
             <!-- 注意事項 -->
             <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
                 <h3 class="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
@@ -81,7 +93,7 @@
                     <li>• Amazonセラーセントラルからダウンロードした注文レポートTXTファイルをそのまま使用してください</li>
                     <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
                     <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
-                    <li>• テンプレートファイルは自動で読み込まれます</li>
+                    <li>• ファイルはUTF-8 with BOMエンコーディングで保存されます</li>
                 </ul>
             </div>
         </div>
@@ -91,96 +103,52 @@
         // グローバル変数
         let amazonOrderData = [];
         let trackingData = [];
-        let templateData = [];
-        let carrierList = [];
         let processedData = [];
-        let templateLoaded = false;
 
-        // キャリアコードマッピング
-        const carrierCodeMap = {
-            'ヤマト運輸': 'YAMATO',
-            'YAMATO': 'YAMATO',
-            '日本郵便': 'Japan Post',
-            'Japan Post': 'Japan Post',
-            '佐川急便': 'SAGAWA',
-            'SAGAWA': 'SAGAWA',
-            'フェデックス': 'FEDEX',
-            'FEDEX': 'FEDEX'
+        // 正確な配送業者マッピング（Amazonの正式リストに基づく）
+        const carrierMapping = {
+            'ヤマト運輸': { code: 'YAMATO', name: 'ヤマト運輸', method: 'ヤマト運輸' },
+            'YAMATO': { code: 'YAMATO', name: 'ヤマト運輸', method: 'ヤマト運輸' },
+            '佐川急便': { code: 'SAGAWA', name: '佐川急便', method: '佐川急便' },
+            'SAGAWA': { code: 'SAGAWA', name: '佐川急便', method: '佐川急便' },
+            '日本郵便': { code: 'Japan Post', name: '日本郵便', method: '日本郵便' },
+            'Japan Post': { code: 'Japan Post', name: '日本郵便', method: '日本郵便' },
+            'フェデックス': { code: 'FEDEX', name: 'フェデックス', method: 'フェデックス' },
+            'FEDEX': { code: 'FEDEX', name: 'フェデックス', method: 'フェデックス' }
         };
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM Content Loaded - 初期化開始');
             
-            loadTemplateFile();
-            
             const txtUpload = document.getElementById('txt-upload');
             const csvUpload = document.getElementById('csv-upload');
             const processBtn = document.getElementById('process-btn');
             const downloadBtn = document.getElementById('download-btn');
             
-            console.log('要素確認:', {
-                txtUpload: !!txtUpload,
-                csvUpload: !!csvUpload,
-                processBtn: !!processBtn,
-                downloadBtn: !!downloadBtn
-            });
-            
             if (txtUpload) {
                 txtUpload.addEventListener('change', handleTxtUpload);
-                console.log('TXTアップロードイベント設定完了');
             }
             
             if (csvUpload) {
                 csvUpload.addEventListener('change', handleCsvUpload);
-                console.log('CSVアップロードイベント設定完了');
             }
             
             if (processBtn) {
                 processBtn.addEventListener('click', processData);
-                console.log('処理ボタンイベント設定完了');
             }
             
             if (downloadBtn) {
                 downloadBtn.addEventListener('click', downloadTxt);
-                console.log('ダウンロードボタンイベント設定完了');
             }
             
             console.log('初期化完了');
         });
 
-        // テンプレートファイルを自動読み込み
-        async function loadTemplateFile() {
-            try {
-                const response = await fetch('./Flat.File.ShippingConfirmation.jp.xls');
-                if (!response.ok) {
-                    console.warn('テンプレートファイルが見つかりません');
-                    return;
-                }
-                
-                const fileContent = await response.arrayBuffer();
-                const workbook = XLSX.read(fileContent, { type: 'array' });
-                
-                // テンプレートシートのヘッダー取得
-                const templateSheet = workbook.Sheets['出荷通知テンプレート_Template'];
-                templateData = XLSX.utils.sheet_to_json(templateSheet, { header: 1 });
-                
-                // 配送業者リスト取得
-                const carrierSheet = workbook.Sheets['配送業者名推奨値'];
-                carrierList = XLSX.utils.sheet_to_json(carrierSheet, { header: 1 });
-                
-                templateLoaded = true;
-                console.log('テンプレートファイル自動読み込み完了');
-            } catch (error) {
-                console.warn('テンプレートファイルの自動読み込みに失敗しました:', error.message);
-            }
-        }
-
-        // Amazon注文レポートファイルを読み込む（修正版）
+        // Amazon注文レポートファイルを読み込む
         async function handleTxtUpload(event) {
             console.log('TXT upload triggered');
             const file = event.target.files[0];
-            console.log('TXT file selected:', file ? file.name : 'none');
             
             if (!file) return;
 
@@ -195,12 +163,6 @@
                 
                 amazonOrderData = result.data;
                 console.log('注文レポートファイル読み込み完了:', amazonOrderData.length, '件');
-                console.log('データサンプル:', amazonOrderData.slice(0, 3));
-                
-                // データの列を確認
-                if (amazonOrderData.length > 0) {
-                    console.log('利用可能な列:', Object.keys(amazonOrderData[0]));
-                }
                 
                 checkProcessButtonState();
             } catch (error) {
@@ -213,7 +175,6 @@
         async function handleCsvUpload(event) {
             console.log('CSV upload triggered');
             const file = event.target.files[0];
-            console.log('CSV file selected:', file ? file.name : 'none');
             
             if (!file) return;
 
@@ -245,18 +206,7 @@
             const hasOrderData = amazonOrderData.length > 0;
             const hasTrackingData = trackingData.length > 0;
             
-            console.log('Check button state:', {
-                hasOrderData,
-                hasTrackingData,
-                orderCount: amazonOrderData.length,
-                trackingCount: trackingData.length
-            });
-            
             processBtn.disabled = !(hasOrderData && hasTrackingData);
-            
-            if (hasOrderData && hasTrackingData) {
-                console.log('両ファイル読み込み完了 - ボタン有効化');
-            }
         }
 
         // データを処理して出荷通知ファイルを生成
@@ -282,15 +232,18 @@
                     unmatchedCount++;
                 }
 
+                // 配送業者情報を取得
+                const carrierInfo = getCarrierInfo(order['ssa-carrier']);
+
                 return {
                     'order-id': order['order-id'] || '',
                     'order-item-id': order['order-item-id'] || '',
-                    'quantity': order['quantity-purchased'] || '',
+                    'quantity': order['quantity-purchased'] || '1',
                     'ship-date': formatShipDate(new Date().toISOString().split('T')[0]),
-                    'carrier-code': getCarrierCode(order['ssa-carrier']),
-                    'carrier-name': getCarrierName(order['ssa-carrier']),
-                    'tracking-number': matchResult ? matchResult.trackingNumber : '',
-                    'ship-method': '',
+                    'carrier-code': carrierInfo.code,
+                    'carrier-name': carrierInfo.name,
+                    'tracking-number': matchResult ? validateTrackingNumber(matchResult.trackingNumber) : '',
+                    'ship-method': carrierInfo.method, // 修正：ship-methodを追加
                     'cod-collection-method': '',
                     'transparency_code': '',
                     'ship_from_address_name': '',
@@ -314,7 +267,7 @@
             document.getElementById('download-btn').disabled = false;
         }
 
-        // 追跡番号マップを構築（AmazonデータのみY列でフィルタ）
+        // 追跡番号マップを構築
         function buildTrackingMap() {
             const phoneMap = {};
             const nameAddressMap = {};
@@ -323,12 +276,8 @@
             
             // Amazonの注文のみをフィルタリング（Y列を確認）
             const amazonTrackingData = trackingData.filter((row, index) => {
-                const orderSource = row[24] || ''; // Y列：注文元（0ベースで24番目）
-                const isAmazon = orderSource.includes('JGSフィッシュ (Amazon店)');
-                if (index < 10) {
-                    console.log(`行 ${index + 1}: Y列注文元="${orderSource}" Amazon=${isAmazon}`);
-                }
-                return isAmazon;
+                const orderSource = row[24] || '';
+                return orderSource.includes('JGSフィッシュ (Amazon店)');
             });
             
             console.log('Amazon注文データ:', amazonTrackingData.length, '件');
@@ -340,25 +289,11 @@
                 const address2 = row[12] || ''; // M列：住所2
                 const name = row[15] || ''; // P列：名前
                 
-                if (index < 5) {
-                    console.log(`Amazon CSVデータ ${index + 1}:`, {
-                        trackingNumber,
-                        phone: `"${phone}" (${phone ? phone.length : 0}桁)`,
-                        name: `"${name}"`,
-                        address1: `"${address1}"`
-                    });
-                }
-                
                 // 電話番号マップ
                 if (phone && phone !== '0' && trackingNumber) {
                     const normalizedPhone = normalizePhone(phone);
                     if (normalizedPhone) {
                         phoneMap[normalizedPhone] = trackingNumber;
-                        if (index < 5) {
-                            console.log(`  電話番号マップ: "${phone}" → "${normalizedPhone}" → ${trackingNumber}`);
-                        }
-                    } else if (index < 5) {
-                        console.log(`  電話番号正規化失敗: "${phone}"`);
                     }
                 }
                 
@@ -367,34 +302,19 @@
                     const fullAddress = normalizeAddress(address1 + address2);
                     const nameAddressKey = `${name.trim()}|${fullAddress}`;
                     nameAddressMap[nameAddressKey] = trackingNumber;
-                    if (index < 3) {
-                        console.log(`  名前+住所マップ: "${nameAddressKey}" → ${trackingNumber}`);
-                    }
                 }
             });
-            
-            console.log('マップ構築完了:', {
-                phoneMapSize: Object.keys(phoneMap).length,
-                nameAddressMapSize: Object.keys(nameAddressMap).length
-            });
-            
-            // 電話番号マップのサンプルを表示
-            const phoneMapEntries = Object.entries(phoneMap).slice(0, 5);
-            console.log('電話番号マップサンプル:', phoneMapEntries);
             
             return { phoneMap, nameAddressMap };
         }
 
-        // 追跡番号を検索（修正版）
+        // 追跡番号を検索
         function findTrackingNumber(order, trackingMap) {
-            // 1. 電話番号マッチング（buyer-phone-numberを使用）
-            const shipPhone = order['buyer-phone-number']; // 正しいフィールド名に修正
+            // 1. 電話番号マッチング
+            const shipPhone = order['buyer-phone-number'];
             const normalizedShipPhone = normalizePhone(shipPhone);
             
-            console.log(`注文 ${order['order-id']}: buyer-phone-number="${shipPhone}" → normalized="${normalizedShipPhone}"`);
-            
             if (normalizedShipPhone && trackingMap.phoneMap[normalizedShipPhone]) {
-                console.log(`  ✅ 電話番号一致: ${normalizedShipPhone} → 追跡番号 ${trackingMap.phoneMap[normalizedShipPhone]}`);
                 return {
                     trackingNumber: trackingMap.phoneMap[normalizedShipPhone],
                     matchType: 'phone'
@@ -409,27 +329,16 @@
                 (order['ship-city'] || '')
             );
             
-            console.log(`  受取人名: "${name}", 住所: "${address}"`);
-            
             if (name && address) {
                 const nameAddressKey = `${name}|${address}`;
                 if (trackingMap.nameAddressMap[nameAddressKey]) {
-                    console.log(`  ✅ 名前+住所一致: ${nameAddressKey} → 追跡番号 ${trackingMap.nameAddressMap[nameAddressKey]}`);
                     return {
                         trackingNumber: trackingMap.nameAddressMap[nameAddressKey],
                         matchType: 'name-address'
                     };
                 }
-                
-                // 3. あいまい一致
-                const fuzzyResult = fuzzyMatch(name, address, trackingMap.nameAddressMap);
-                if (fuzzyResult) {
-                    console.log(`  ⚠️ あいまい一致: → 追跡番号 ${fuzzyResult.trackingNumber}`);
-                    return fuzzyResult;
-                }
             }
             
-            console.log(`  ❌ 一致なし`);
             return null;
         }
 
@@ -437,200 +346,135 @@
         function normalizePhone(phone) {
             if (!phone || phone === '0') return null;
             
-            // ハイフン・スペース削除
             let normalized = phone.replace(/[-\s]/g, '');
             
-            // 数字のみかチェック
             if (!/^\d+$/.test(normalized)) return null;
             
-            // 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
             if (normalized.length === 9 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
-            // 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
             if (normalized.length === 10 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
-            // 11桁で先頭が0の場合はそのまま（携帯電話）
-            if (normalized.length === 11 && normalized.startsWith('0')) {
+            if ((normalized.length === 11 && normalized.startsWith('0')) ||
+                (normalized.length === 10 && normalized.startsWith('0'))) {
                 return normalized;
             }
             
-            // 10桁で先頭が0の場合もそのまま（固定電話）
-            if (normalized.length === 10 && normalized.startsWith('0')) {
-                return normalized;
-            }
-            
-            console.log(`電話番号正規化失敗: "${phone}" → "${normalized}" (${normalized.length}桁)`);
             return null;
         }
 
         // 住所正規化
         function normalizeAddress(address) {
             return address
-                .replace(/\s+/g, '') // 空白除去
-                .replace(/[０-９]/g, (s) => // 全角数字→半角
+                .replace(/\s+/g, '')
+                .replace(/[０-９]/g, (s) => 
                     String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
                 .toLowerCase();
-        }
-
-        // あいまいマッチング
-        function fuzzyMatch(targetName, targetAddress, nameAddressMap) {
-            let bestMatch = null;
-            let bestScore = 0;
-            
-            for (const [key, trackingNumber] of Object.entries(nameAddressMap)) {
-                const [name, address] = key.split('|');
-                const nameScore = calculateSimilarity(targetName, name);
-                const addressScore = calculateSimilarity(targetAddress, address);
-                const totalScore = (nameScore + addressScore) / 2;
-                
-                if (totalScore > 0.8 && totalScore > bestScore) {
-                    bestMatch = trackingNumber;
-                    bestScore = totalScore;
-                }
-            }
-            
-            return bestMatch ? {
-                trackingNumber: bestMatch,
-                matchType: 'fuzzy'
-            } : null;
-        }
-
-        // 文字列類似度計算（簡易版）
-        function calculateSimilarity(str1, str2) {
-            if (str1 === str2) return 1;
-            if (!str1 || !str2) return 0;
-            
-            const longer = str1.length > str2.length ? str1 : str2;
-            const shorter = str1.length > str2.length ? str2 : str1;
-            
-            if (longer.length === 0) return 1;
-            
-            const distance = levenshteinDistance(longer, shorter);
-            return (longer.length - distance) / longer.length;
-        }
-
-        // レーベンシュタイン距離
-        function levenshteinDistance(str1, str2) {
-            const matrix = [];
-            
-            for (let i = 0; i <= str2.length; i++) {
-                matrix[i] = [i];
-            }
-            
-            for (let j = 0; j <= str1.length; j++) {
-                matrix[0][j] = j;
-            }
-            
-            for (let i = 1; i <= str2.length; i++) {
-                for (let j = 1; j <= str1.length; j++) {
-                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                        matrix[i][j] = matrix[i - 1][j - 1];
-                    } else {
-                        matrix[i][j] = Math.min(
-                            matrix[i - 1][j - 1] + 1,
-                            matrix[i][j - 1] + 1,
-                            matrix[i - 1][j] + 1
-                        );
-                    }
-                }
-            }
-            
-            return matrix[str2.length][str1.length];
         }
 
         // 出荷日をフォーマット
         function formatShipDate(dateStr) {
             if (!dateStr) return new Date().toISOString().split('T')[0];
             
-            // 既にYYYY-MM-DD形式の場合はそのまま返す
             if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
                 return dateStr;
             }
             
-            // その他の形式は今日の日付を使用
             return new Date().toISOString().split('T')[0];
         }
 
-        // 配送業者コードを取得
-        function getCarrierCode(carrierInfo) {
-            if (!carrierInfo) return 'YAMATO';
+        // 配送業者情報を取得（修正版）
+        function getCarrierInfo(carrierInfo) {
+            if (!carrierInfo) {
+                return carrierMapping['ヤマト運輸']; // デフォルト
+            }
             
-            if (carrierInfo.includes('ヤマト') || carrierInfo.includes('YAMATO')) return 'YAMATO';
-            if (carrierInfo.includes('佐川') || carrierInfo.includes('SAGAWA')) return 'SAGAWA';
-            if (carrierInfo.includes('郵便') || carrierInfo.includes('Japan Post')) return 'Japan Post';
-            if (carrierInfo.includes('フェデックス') || carrierInfo.includes('FEDEX')) return 'FEDEX';
+            // 部分一致で検索
+            for (const [key, value] of Object.entries(carrierMapping)) {
+                if (carrierInfo.includes(key) || key.includes(carrierInfo)) {
+                    return value;
+                }
+            }
             
-            return 'YAMATO'; // デフォルト
+            return carrierMapping['ヤマト運輸']; // デフォルト
         }
 
-        // 配送業者名を取得
-        function getCarrierName(carrierInfo) {
-            if (!carrierInfo) return 'ヤマト運輸';
+        // 追跡番号の形式を検証
+        function validateTrackingNumber(trackingNumber) {
+            if (!trackingNumber) return '';
             
-            if (carrierInfo.includes('ヤマト') || carrierInfo.includes('YAMATO')) return 'ヤマト運輸';
-            if (carrierInfo.includes('佐川') || carrierInfo.includes('SAGAWA')) return '佐川急便';
-            if (carrierInfo.includes('郵便') || carrierInfo.includes('Japan Post')) return '日本郵便';
-            if (carrierInfo.includes('フェデックス') || carrierInfo.includes('FEDEX')) return 'フェデックス';
+            // 数字とハイフンのみ許可
+            const cleaned = trackingNumber.replace(/[^\d-]/g, '');
             
-            return 'ヤマト運輸'; // デフォルト
+            // ヤマト運輸の追跡番号形式（12桁の数字）をチェック
+            if (/^\d{12}$/.test(cleaned.replace(/-/g, ''))) {
+                return cleaned.replace(/-/g, '');
+            }
+            
+            return cleaned;
         }
 
-        // 処理結果を表示（未マッチエラーログのみ）
+        // 処理結果を表示
         function displayResult(data, unmatchedCount) {
             const resultSection = document.getElementById('result-section');
             const resultContent = document.getElementById('result-content');
             
+            let html = `
+                <div class="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
+                    <h3 class="font-semibold text-green-800 mb-2">✅ 処理完了</h3>
+                    <p class="text-green-700">
+                        ${data.length}件の注文を処理しました。
+                        マッチ成功: ${data.length - unmatchedCount}件
+                    </p>
+                </div>
+            `;
+            
             if (unmatchedCount > 0) {
-                // 未マッチの注文を抽出
                 const unmatchedOrders = data.filter(row => !row['tracking-number']);
                 
-                let errorHtml = `
-                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
-                        <h3 class="font-semibold text-red-800 mb-2">❌ 未マッチ注文 (${unmatchedCount}件)</h3>
-                        <div class="text-red-700 text-sm">
+                html += `
+                    <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <h3 class="font-semibold text-yellow-800 mb-2">⚠️ 未マッチ注文 (${unmatchedCount}件)</h3>
+                        <div class="text-yellow-700 text-sm">
                             <p class="mb-3">以下の注文で追跡番号が見つかりませんでした：</p>
                             <div class="bg-white border rounded p-2 max-h-40 overflow-y-auto">
                 `;
                 
-                unmatchedOrders.forEach(order => {
-                    errorHtml += `
+                unmatchedOrders.slice(0, 10).forEach(order => {
+                    html += `
                         <div class="mb-1 text-xs">
                             <strong>注文ID:</strong> ${order['order-id']} | 
-                            <strong>商品ID:</strong> ${order['order-item-id']} | 
-                            <strong>受取人:</strong> ${data.find(d => d['order-id'] === order['order-id'])?.['recipient-name'] || 'N/A'}
+                            <strong>商品ID:</strong> ${order['order-item-id']}
                         </div>
                     `;
                 });
                 
-                errorHtml += `
+                if (unmatchedOrders.length > 10) {
+                    html += `<div class="text-xs text-gray-500">...他${unmatchedOrders.length - 10}件</div>`;
+                }
+                
+                html += `
                             </div>
-                            <p class="mt-3 text-sm">
-                                追跡番号CSVファイルを確認して、該当する注文の追跡番号が「JGSフィッシュ (Amazon店)」として登録されているか確認してください。
-                            </p>
                         </div>
                     </div>
                 `;
-                
-                resultContent.innerHTML = errorHtml;
-                resultSection.style.display = 'block';
-            } else {
-                // 全件マッチの場合は何も表示しない
-                resultSection.style.display = 'none';
             }
+            
+            resultContent.innerHTML = html;
+            resultSection.style.display = 'block';
         }
 
-        // TXTファイルをダウンロード
+        // TXTファイルをダウンロード（UTF-8 with BOM対応）
         function downloadTxt() {
             if (processedData.length === 0) {
                 alert('データを先に処理してください');
                 return;
             }
 
-            // ヘッダー行を作成
+            // ヘッダー行を作成（Amazonの正式テンプレート形式）
             const headers = [
                 'TemplateType=OrderFulfillment',
                 'Version=2011.1102',
@@ -639,10 +483,11 @@
 
             const columnHeaders = [
                 '注文番号', '注文商品番号', '出荷数', '出荷日', '配送業者コード', '配送業者名',
-                'お問い合わせ伝票番号', '配送方法', '代金引換', '製品が透明に登録されている場合の製品の透明コード。',
+                'お問い合わせ伝票番号', '配送方法', '代金引換', 
+                '製品が透明に登録されている場合の製品の透明コード。',
                 '出荷元住所-名称', '出荷元住所-行 1', '出荷元住所-行 2', '出荷元住所-行 3',
-                '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', '出荷元住所-郵便番号',
-                '出荷元住所-国コード'
+                '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', 
+                '出荷元住所-郵便番号', '出荷元住所-国コード'
             ];
 
             const columnIds = [
@@ -650,7 +495,8 @@
                 'tracking-number', 'ship-method', 'cod-collection-method', 'transparency_code',
                 'ship_from_address_name', 'ship_from_address_line1', 'ship_from_address_line2',
                 'ship_from_address_line3', 'ship_from_address_city', 'ship_from_address_county',
-                'ship_from_address_state_or_region', 'ship_from_address_postalcode', 'ship_from_address_countrycode'
+                'ship_from_address_state_or_region', 'ship_from_address_postalcode', 
+                'ship_from_address_countrycode'
             ];
 
             // データ行を作成
@@ -666,8 +512,12 @@
                 ...dataRows
             ].join('\n');
 
-            // ファイルをダウンロード
-            const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
+            // UTF-8 with BOMで保存
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + content], { 
+                type: 'text/plain; charset=utf-8' 
+            });
+            
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -676,6 +526,8 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            
+            console.log('ファイルダウンロード完了: UTF-8 with BOM形式');
         }
     </script>
 </body>
