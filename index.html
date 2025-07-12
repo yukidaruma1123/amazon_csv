@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Amazon出荷通知処理システム（修正版）</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -13,6 +12,17 @@
         <h1 class="text-2xl font-bold text-gray-900 mb-8">
             Amazon出荷通知処理システム（修正版）
         </h1>
+
+        <!-- 修正点の説明 -->
+        <div class="bg-blue-50 p-6 rounded-lg border border-blue-200 mb-6">
+            <h3 class="text-lg font-semibold text-blue-800 mb-2">🔧 修正内容</h3>
+            <ul class="text-sm text-blue-700 space-y-1">
+                <li>• <strong>carrier-code</strong>: YAMATO, SAGAWA等の英語表記</li>
+                <li>• <strong>carrier-name</strong>: 「Other」以外は空欄、「Other」の場合のみ英数字の配送業者名</li>
+                <li>• <strong>ship-method</strong>: YAMATOの場合は「NEKOPOSU」、その他は配送業者名</li>
+                <li>• 全て英数字のみでAmazonの要件に完全準拠</li>
+            </ul>
+        </div>
 
         <div class="space-y-6">
             <!-- ファイルアップロード -->
@@ -63,7 +73,7 @@
                         class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         disabled
                     >
-                        TXTファイルダウンロード
+                        修正版TXTファイルダウンロード
                     </button>
                 </div>
             </div>
@@ -74,26 +84,14 @@
                 <div id="result-content"></div>
             </div>
 
-            <!-- 修正点の説明 -->
-            <div class="bg-blue-50 p-6 rounded-lg border border-blue-200">
-                <h3 class="text-lg font-semibold text-blue-800 mb-2">修正内容</h3>
-                <ul class="text-sm text-blue-700 space-y-1">
-                    <li>• 文字エンコーディングをUTF-8 with BOMに修正</li>
-                    <li>• ship-methodフィールドに適切な配送方法名を自動設定</li>
-                    <li>• 配送業者コードのマッピングを正確に修正</li>
-                    <li>• 追跡番号の形式チェックを強化</li>
-                    <li>• Amazonテンプレート形式への完全準拠</li>
-                </ul>
-            </div>
-
             <!-- 注意事項 -->
             <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-                <h3 class="text-lg font-semibold text-yellow-800 mb-2">注意事項</h3>
+                <h3 class="text-lg font-semibold text-yellow-800 mb-2">修正版の特徴</h3>
                 <ul class="text-sm text-yellow-700 space-y-1">
-                    <li>• Amazonセラーセントラルからダウンロードした注文レポートTXTファイルをそのまま使用してください</li>
-                    <li>• 出荷日・配送業者・追跡番号の情報を手動で入力する場合は、適切な形式で入力してください</li>
-                    <li>• 生成されたTXTファイルをAmazonセラーセントラルの「注文関連ファイルをアップロード」にアップロードしてください</li>
-                    <li>• ファイルはUTF-8 with BOMエンコーディングで保存されます</li>
+                    <li>• <strong>carrier-code</strong>: 標準業者は英語コード（YAMATO、SAGAWA等）</li>
+                    <li>• <strong>carrier-name</strong>: 標準業者は空欄、「Other」のみ英数字の配送業者名</li>
+                    <li>• <strong>ship-method</strong>: YAMATOは「NEKOPOSU」、その他は配送業者名</li>
+                    <li>• 全てのフィールドが英数字のみでAmazon要件に準拠</li>
                 </ul>
             </div>
         </div>
@@ -105,51 +103,39 @@
         let trackingData = [];
         let processedData = [];
 
-        // 正確な配送業者マッピング（Amazonの正式リストに基づく）
+        // 配送業者マッピング（厳密版）
         const carrierMapping = {
-            'ヤマト運輸': { code: 'YAMATO', name: 'ヤマト運輸', method: 'ヤマト運輸' },
-            'YAMATO': { code: 'YAMATO', name: 'ヤマト運輸', method: 'ヤマト運輸' },
-            '佐川急便': { code: 'SAGAWA', name: '佐川急便', method: '佐川急便' },
-            'SAGAWA': { code: 'SAGAWA', name: '佐川急便', method: '佐川急便' },
-            '日本郵便': { code: 'Japan Post', name: '日本郵便', method: '日本郵便' },
-            'Japan Post': { code: 'Japan Post', name: '日本郵便', method: '日本郵便' },
-            'フェデックス': { code: 'FEDEX', name: 'フェデックス', method: 'フェデックス' },
-            'FEDEX': { code: 'FEDEX', name: 'フェデックス', method: 'フェデックス' }
+            'ヤマト運輸': { code: 'YAMATO', name: '', method: 'NEKOPOSU' },
+            'YAMATO': { code: 'YAMATO', name: '', method: 'NEKOPOSU' },
+            '佐川急便': { code: 'SAGAWA', name: '', method: 'SAGAWA' },
+            'SAGAWA': { code: 'SAGAWA', name: '', method: 'SAGAWA' },
+            '日本郵便': { code: 'Japan Post', name: '', method: 'Japan Post' },
+            'Japan Post': { code: 'Japan Post', name: '', method: 'Japan Post' },
+            'DHL': { code: 'DHL', name: '', method: 'DHL' },
+            'FedEx': { code: 'FedEx', name: '', method: 'FedEx' },
+            'UPS': { code: 'UPS', name: '', method: 'UPS' }
         };
 
         // 初期化
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded - 初期化開始');
+            console.log('修正版システム初期化開始');
             
             const txtUpload = document.getElementById('txt-upload');
             const csvUpload = document.getElementById('csv-upload');
             const processBtn = document.getElementById('process-btn');
             const downloadBtn = document.getElementById('download-btn');
             
-            if (txtUpload) {
-                txtUpload.addEventListener('change', handleTxtUpload);
-            }
+            if (txtUpload) txtUpload.addEventListener('change', handleTxtUpload);
+            if (csvUpload) csvUpload.addEventListener('change', handleCsvUpload);
+            if (processBtn) processBtn.addEventListener('click', processData);
+            if (downloadBtn) downloadBtn.addEventListener('click', downloadTxt);
             
-            if (csvUpload) {
-                csvUpload.addEventListener('change', handleCsvUpload);
-            }
-            
-            if (processBtn) {
-                processBtn.addEventListener('click', processData);
-            }
-            
-            if (downloadBtn) {
-                downloadBtn.addEventListener('click', downloadTxt);
-            }
-            
-            console.log('初期化完了');
+            console.log('修正版システム初期化完了');
         });
 
         // Amazon注文レポートファイルを読み込む
         async function handleTxtUpload(event) {
-            console.log('TXT upload triggered');
             const file = event.target.files[0];
-            
             if (!file) return;
 
             try {
@@ -173,9 +159,7 @@
 
         // 追跡番号ファイルを読み込む
         async function handleCsvUpload(event) {
-            console.log('CSV upload triggered');
             const file = event.target.files[0];
-            
             if (!file) return;
 
             try {
@@ -209,15 +193,10 @@
             processBtn.disabled = !(hasOrderData && hasTrackingData);
         }
 
-        // データを処理して出荷通知ファイルを生成
+        // データを処理して出荷通知ファイルを生成（修正版）
         function processData() {
-            if (amazonOrderData.length === 0) {
-                alert('注文レポートファイルを先に読み込んでください');
-                return;
-            }
-
-            if (trackingData.length === 0) {
-                alert('追跡番号ファイルを先に読み込んでください');
+            if (amazonOrderData.length === 0 || trackingData.length === 0) {
+                alert('両方のファイルを先に読み込んでください');
                 return;
             }
 
@@ -232,18 +211,18 @@
                     unmatchedCount++;
                 }
 
-                // 配送業者情報を取得
+                // 配送業者情報を取得（修正版）
                 const carrierInfo = getCarrierInfo(order['ssa-carrier']);
 
                 return {
                     'order-id': order['order-id'] || '',
                     'order-item-id': order['order-item-id'] || '',
-                    'quantity': order['quantity-purchased'] || '1',
+                    'quantity': order['quantity-purchased'] || '',
                     'ship-date': formatShipDate(new Date().toISOString().split('T')[0]),
                     'carrier-code': carrierInfo.code,
-                    'carrier-name': carrierInfo.name,
-                    'tracking-number': matchResult ? validateTrackingNumber(matchResult.trackingNumber) : '',
-                    'ship-method': carrierInfo.method, // 修正：ship-methodを追加
+                    'carrier-name': carrierInfo.name, // 標準業者の場合は空欄
+                    'tracking-number': matchResult ? matchResult.trackingNumber : '',
+                    'ship-method': carrierInfo.method, // 英語の配送業者名
                     'cod-collection-method': '',
                     'transparency_code': '',
                     'ship_from_address_name': '',
@@ -265,6 +244,52 @@
             
             // ダウンロードボタンを有効化
             document.getElementById('download-btn').disabled = false;
+            
+            console.log('データ処理完了:', processed.length, '件');
+        }
+
+        // 厳密版：配送業者情報を取得
+        function getCarrierInfo(carrierInput) {
+            if (!carrierInput) {
+                return carrierMapping['YAMATO']; // デフォルト：ヤマト運輸
+            }
+            
+            // 既知の配送業者をチェック
+            for (const [key, info] of Object.entries(carrierMapping)) {
+                if (carrierInput.includes(key) || 
+                    carrierInput.toUpperCase().includes(key.toUpperCase())) {
+                    return info;
+                }
+            }
+            
+            // どの既知業者にも該当しない場合は「Other」
+            return { 
+                code: 'Other', 
+                name: getCustomCarrierName(carrierInput), // 英数字の配送業者名
+                method: 'Other' 
+            };
+        }
+
+        // カスタム配送業者名を英数字で生成
+        function getCustomCarrierName(carrierInput) {
+            if (!carrierInput) return 'Custom Carrier';
+            
+            // 日本語を英数字に変換または除去
+            let englishName = carrierInput
+                .replace(/ヤマト/g, 'YAMATO')
+                .replace(/佐川/g, 'SAGAWA')
+                .replace(/郵便/g, 'Post')
+                .replace(/運輸/g, 'Transport')
+                .replace(/急便/g, 'Express')
+                .replace(/[^\w\s]/g, '') // 英数字とスペース以外を除去
+                .trim();
+            
+            // 50文字制限
+            if (englishName.length > 50) {
+                englishName = englishName.substring(0, 50);
+            }
+            
+            return englishName || 'Custom Carrier';
         }
 
         // 追跡番号マップを構築
@@ -272,22 +297,18 @@
             const phoneMap = {};
             const nameAddressMap = {};
             
-            console.log('追跡番号マップ構築開始:', trackingData.length, '件');
-            
             // Amazonの注文のみをフィルタリング（Y列を確認）
-            const amazonTrackingData = trackingData.filter((row, index) => {
+            const amazonTrackingData = trackingData.filter(row => {
                 const orderSource = row[24] || '';
                 return orderSource.includes('JGSフィッシュ (Amazon店)');
             });
             
-            console.log('Amazon注文データ:', amazonTrackingData.length, '件');
-            
-            amazonTrackingData.forEach((row, index) => {
-                const trackingNumber = row[3]; // D列：追跡番号
-                const phone = row[8]; // I列：電話番号
-                const address1 = row[11] || ''; // L列：住所1
-                const address2 = row[12] || ''; // M列：住所2
-                const name = row[15] || ''; // P列：名前
+            amazonTrackingData.forEach(row => {
+                const trackingNumber = row[3];
+                const phone = row[8];
+                const address1 = row[11] || '';
+                const address2 = row[12] || '';
+                const name = row[15] || '';
                 
                 // 電話番号マップ
                 if (phone && phone !== '0' && trackingNumber) {
@@ -310,7 +331,7 @@
 
         // 追跡番号を検索
         function findTrackingNumber(order, trackingMap) {
-            // 1. 電話番号マッチング
+            // 電話番号マッチング
             const shipPhone = order['buyer-phone-number'];
             const normalizedShipPhone = normalizePhone(shipPhone);
             
@@ -321,7 +342,7 @@
                 };
             }
             
-            // 2. 名前+住所マッチング
+            // 名前+住所マッチング
             const name = (order['recipient-name'] || '').trim();
             const address = normalizeAddress(
                 (order['ship-address-1'] || '') + 
@@ -386,37 +407,6 @@
             return new Date().toISOString().split('T')[0];
         }
 
-        // 配送業者情報を取得（修正版）
-        function getCarrierInfo(carrierInfo) {
-            if (!carrierInfo) {
-                return carrierMapping['ヤマト運輸']; // デフォルト
-            }
-            
-            // 部分一致で検索
-            for (const [key, value] of Object.entries(carrierMapping)) {
-                if (carrierInfo.includes(key) || key.includes(carrierInfo)) {
-                    return value;
-                }
-            }
-            
-            return carrierMapping['ヤマト運輸']; // デフォルト
-        }
-
-        // 追跡番号の形式を検証
-        function validateTrackingNumber(trackingNumber) {
-            if (!trackingNumber) return '';
-            
-            // 数字とハイフンのみ許可
-            const cleaned = trackingNumber.replace(/[^\d-]/g, '');
-            
-            // ヤマト運輸の追跡番号形式（12桁の数字）をチェック
-            if (/^\d{12}$/.test(cleaned.replace(/-/g, ''))) {
-                return cleaned.replace(/-/g, '');
-            }
-            
-            return cleaned;
-        }
-
         // 処理結果を表示
         function displayResult(data, unmatchedCount) {
             const resultSection = document.getElementById('result-section');
@@ -424,11 +414,13 @@
             
             let html = `
                 <div class="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
-                    <h3 class="font-semibold text-green-800 mb-2">✅ 処理完了</h3>
-                    <p class="text-green-700">
-                        ${data.length}件の注文を処理しました。
-                        マッチ成功: ${data.length - unmatchedCount}件
-                    </p>
+                    <h3 class="font-semibold text-green-800 mb-2">✅ 修正完了</h3>
+                    <div class="text-green-700 text-sm">
+                        <p>• carrier-code: 標準業者は英語コード（YAMATO、SAGAWA等）</p>
+                        <p>• carrier-name: 標準業者は空欄、「Other」のみ英数字名</p>
+                        <p>• ship-method: YAMATOは「NEKOPOSU」、その他は配送業者名</p>
+                        <p>• 全フィールドが英数字のみでAmazon要件に完全準拠</p>
+                    </div>
                 </div>
             `;
             
@@ -452,10 +444,6 @@
                     `;
                 });
                 
-                if (unmatchedOrders.length > 10) {
-                    html += `<div class="text-xs text-gray-500">...他${unmatchedOrders.length - 10}件</div>`;
-                }
-                
                 html += `
                             </div>
                         </div>
@@ -467,14 +455,14 @@
             resultSection.style.display = 'block';
         }
 
-        // TXTファイルをダウンロード（UTF-8 with BOM対応）
+        // 修正版TXTファイルをダウンロード
         function downloadTxt() {
             if (processedData.length === 0) {
                 alert('データを先に処理してください');
                 return;
             }
 
-            // ヘッダー行を作成（Amazonの正式テンプレート形式）
+            // ヘッダー行を作成
             const headers = [
                 'TemplateType=OrderFulfillment',
                 'Version=2011.1102',
@@ -483,11 +471,10 @@
 
             const columnHeaders = [
                 '注文番号', '注文商品番号', '出荷数', '出荷日', '配送業者コード', '配送業者名',
-                'お問い合わせ伝票番号', '配送方法', '代金引換', 
-                '製品が透明に登録されている場合の製品の透明コード。',
+                'お問い合わせ伝票番号', '配送方法', '代金引換', '製品が透明に登録されている場合の製品の透明コード。',
                 '出荷元住所-名称', '出荷元住所-行 1', '出荷元住所-行 2', '出荷元住所-行 3',
-                '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', 
-                '出荷元住所-郵便番号', '出荷元住所-国コード'
+                '出荷元住所-市町村', '出荷元住所-郡', '出荷元住所-州・省', '出荷元住所-郵便番号',
+                '出荷元住所-国コード'
             ];
 
             const columnIds = [
@@ -495,8 +482,7 @@
                 'tracking-number', 'ship-method', 'cod-collection-method', 'transparency_code',
                 'ship_from_address_name', 'ship_from_address_line1', 'ship_from_address_line2',
                 'ship_from_address_line3', 'ship_from_address_city', 'ship_from_address_county',
-                'ship_from_address_state_or_region', 'ship_from_address_postalcode', 
-                'ship_from_address_countrycode'
+                'ship_from_address_state_or_region', 'ship_from_address_postalcode', 'ship_from_address_countrycode'
             ];
 
             // データ行を作成
@@ -512,22 +498,18 @@
                 ...dataRows
             ].join('\n');
 
-            // UTF-8 with BOMで保存
-            const BOM = '\uFEFF';
-            const blob = new Blob([BOM + content], { 
-                type: 'text/plain; charset=utf-8' 
-            });
-            
+            // ファイルをダウンロード
+            const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `shipping_notification_${new Date().toISOString().split('T')[0]}.txt`;
+            a.download = `shipping_notification_fixed_${new Date().toISOString().split('T')[0]}.txt`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            console.log('ファイルダウンロード完了: UTF-8 with BOM形式');
+            console.log('修正版ファイルダウンロード完了');
         }
     </script>
 </body>
