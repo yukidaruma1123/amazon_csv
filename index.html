@@ -17,10 +17,10 @@
         <div class="bg-blue-50 p-6 rounded-lg border border-blue-200 mb-6">
             <h3 class="text-lg font-semibold text-blue-800 mb-2">🔧 修正内容</h3>
             <ul class="text-sm text-blue-700 space-y-1">
-                <li>• <strong>carrier-code</strong>: YAMATO, SAGAWA等の英語表記</li>
-                <li>• <strong>carrier-name</strong>: 「Other」以外は空欄、「Other」の場合のみ英数字の配送業者名</li>
-                <li>• <strong>ship-method</strong>: YAMATOの場合は「NEKOPOSU」、その他は配送業者名</li>
-                <li>• 全て英数字のみでAmazonの要件に完全準拠</li>
+                <li>• <strong>carrier-code</strong>: 基本的に「YAMATO」、その他の場合のみ「Other」</li>
+                <li>• <strong>carrier-name</strong>: carrier-codeが「Other」以外は空欄</li>
+                <li>• <strong>ship-method</strong>: 基本的に「NEKOPOSU」</li>
+                <li>• 全て英数字のみで出力してAmazonの要件に適合</li>
             </ul>
         </div>
 
@@ -88,10 +88,11 @@
             <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
                 <h3 class="text-lg font-semibold text-yellow-800 mb-2">修正版の特徴</h3>
                 <ul class="text-sm text-yellow-700 space-y-1">
-                    <li>• <strong>carrier-code</strong>: 標準業者は英語コード（YAMATO、SAGAWA等）</li>
-                    <li>• <strong>carrier-name</strong>: 標準業者は空欄、「Other」のみ英数字の配送業者名</li>
-                    <li>• <strong>ship-method</strong>: YAMATOは「NEKOPOSU」、その他は配送業者名</li>
-                    <li>• 全てのフィールドが英数字のみでAmazon要件に準拠</li>
+                    <li>• <strong>carrier-code</strong>: 基本的に「YAMATO」</li>
+                    <li>• <strong>carrier-name</strong>: 「Other」以外は空欄、「Other」の場合は英数字の配送業者名</li>
+                    <li>• <strong>ship-method</strong>: 基本的に「NEKOPOSU」</li>
+                    <li>• 全てのフィールドが英数字のみでAmazonの要件に準拠</li>
+                    <li>• 文字エンコーディング問題を回避</li>
                 </ul>
             </div>
         </div>
@@ -103,17 +104,16 @@
         let trackingData = [];
         let processedData = [];
 
-        // 配送業者マッピング（厳密版）
+        // 配送業者マッピング（修正版）
         const carrierMapping = {
             'ヤマト運輸': { code: 'YAMATO', name: '', method: 'NEKOPOSU' },
             'YAMATO': { code: 'YAMATO', name: '', method: 'NEKOPOSU' },
-            '佐川急便': { code: 'SAGAWA', name: '', method: 'SAGAWA' },
-            'SAGAWA': { code: 'SAGAWA', name: '', method: 'SAGAWA' },
-            '日本郵便': { code: 'Japan Post', name: '', method: 'Japan Post' },
-            'Japan Post': { code: 'Japan Post', name: '', method: 'Japan Post' },
-            'DHL': { code: 'DHL', name: '', method: 'DHL' },
-            'FedEx': { code: 'FedEx', name: '', method: 'FedEx' },
-            'UPS': { code: 'UPS', name: '', method: 'UPS' }
+            '佐川急便': { code: 'Other', name: 'SAGAWA', method: 'SAGAWA' },
+            'SAGAWA': { code: 'Other', name: 'SAGAWA', method: 'SAGAWA' },
+            '日本郵便': { code: 'Other', name: 'Japan Post', method: 'Japan Post' },
+            'Japan Post': { code: 'Other', name: 'Japan Post', method: 'Japan Post' },
+            'その他': { code: 'Other', name: 'Custom Carrier', method: 'Custom' },
+            'default': { code: 'YAMATO', name: '', method: 'NEKOPOSU' }
         };
 
         // 初期化
@@ -248,48 +248,25 @@
             console.log('データ処理完了:', processed.length, '件');
         }
 
-        // 厳密版：配送業者情報を取得
+        // 修正版：配送業者情報を取得
         function getCarrierInfo(carrierInput) {
+            // 基本的にYAMATO + NEKOPOSUをデフォルトとする
             if (!carrierInput) {
-                return carrierMapping['YAMATO']; // デフォルト：ヤマト運輸
+                return carrierMapping['default'];
             }
             
             // 既知の配送業者をチェック
             for (const [key, info] of Object.entries(carrierMapping)) {
+                if (key === 'default') continue;
+                
                 if (carrierInput.includes(key) || 
                     carrierInput.toUpperCase().includes(key.toUpperCase())) {
                     return info;
                 }
             }
             
-            // どの既知業者にも該当しない場合は「Other」
-            return { 
-                code: 'Other', 
-                name: getCustomCarrierName(carrierInput), // 英数字の配送業者名
-                method: 'Other' 
-            };
-        }
-
-        // カスタム配送業者名を英数字で生成
-        function getCustomCarrierName(carrierInput) {
-            if (!carrierInput) return 'Custom Carrier';
-            
-            // 日本語を英数字に変換または除去
-            let englishName = carrierInput
-                .replace(/ヤマト/g, 'YAMATO')
-                .replace(/佐川/g, 'SAGAWA')
-                .replace(/郵便/g, 'Post')
-                .replace(/運輸/g, 'Transport')
-                .replace(/急便/g, 'Express')
-                .replace(/[^\w\s]/g, '') // 英数字とスペース以外を除去
-                .trim();
-            
-            // 50文字制限
-            if (englishName.length > 50) {
-                englishName = englishName.substring(0, 50);
-            }
-            
-            return englishName || 'Custom Carrier';
+            // 見つからない場合はデフォルト（YAMATO + NEKOPOSU）
+            return carrierMapping['default'];
         }
 
         // 追跡番号マップを構築
@@ -412,17 +389,17 @@
             const resultSection = document.getElementById('result-section');
             const resultContent = document.getElementById('result-content');
             
-            let html = `
-                <div class="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
-                    <h3 class="font-semibold text-green-800 mb-2">✅ 修正完了</h3>
-                    <div class="text-green-700 text-sm">
-                        <p>• carrier-code: 標準業者は英語コード（YAMATO、SAGAWA等）</p>
-                        <p>• carrier-name: 標準業者は空欄、「Other」のみ英数字名</p>
-                        <p>• ship-method: YAMATOは「NEKOPOSU」、その他は配送業者名</p>
-                        <p>• 全フィールドが英数字のみでAmazon要件に完全準拠</p>
+                html += `
+                    <div class="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
+                        <h3 class="font-semibold text-green-800 mb-2">✅ 修正完了</h3>
+                        <div class="text-green-700 text-sm">
+                            <p>• carrier-code: 基本的に「YAMATO」</p>
+                            <p>• carrier-name: 「Other」以外は空欄</p>
+                            <p>• ship-method: 基本的に「NEKOPOSU」</p>
+                            <p>• 全フィールドが英数字のみでAmazon要件に準拠</p>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
             
             if (unmatchedCount > 0) {
                 const unmatchedOrders = data.filter(row => !row['tracking-number']);
