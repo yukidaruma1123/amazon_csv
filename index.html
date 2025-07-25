@@ -284,20 +284,23 @@
             return { phoneMap, nameAddressMap };
         }
 
-        // 追跡番号を検索
+        // 追跡番号を検索（修正版：+記号対応）
         function findTrackingNumber(order, trackingMap) {
-            // 電話番号マッチング
+            // 1. 電話番号マッチング（buyer-phone-numberを使用）
             const shipPhone = order['buyer-phone-number'];
             const normalizedShipPhone = normalizePhone(shipPhone);
             
+            console.log(`注文 ${order['order-id']}: buyer-phone-number="${shipPhone}" → normalized="${normalizedShipPhone}"`);
+            
             if (normalizedShipPhone && trackingMap.phoneMap[normalizedShipPhone]) {
+                console.log(`  ✅ 電話番号一致: ${normalizedShipPhone} → 追跡番号 ${trackingMap.phoneMap[normalizedShipPhone]}`);
                 return {
                     trackingNumber: trackingMap.phoneMap[normalizedShipPhone],
                     matchType: 'phone'
                 };
             }
             
-            // 名前+住所マッチング
+            // 2. 名前+住所マッチング
             const name = (order['recipient-name'] || '').trim();
             const address = normalizeAddress(
                 (order['ship-address-1'] || '') + 
@@ -305,49 +308,62 @@
                 (order['ship-city'] || '')
             );
             
+            console.log(`  受取人名: "${name}", 住所: "${address}"`);
+            
             if (name && address) {
                 const nameAddressKey = `${name}|${address}`;
                 if (trackingMap.nameAddressMap[nameAddressKey]) {
+                    console.log(`  ✅ 名前+住所一致: ${nameAddressKey} → 追跡番号 ${trackingMap.nameAddressMap[nameAddressKey]}`);
                     return {
                         trackingNumber: trackingMap.nameAddressMap[nameAddressKey],
                         matchType: 'name-address'
                     };
                 }
+                
+                // 3. あいまい一致
+                const fuzzyResult = fuzzyMatch(name, address, trackingMap.nameAddressMap);
+                if (fuzzyResult) {
+                    console.log(`  ⚠️ あいまい一致: → 追跡番号 ${fuzzyResult.trackingNumber}`);
+                    return fuzzyResult;
+                }
             }
             
+            console.log(`  ❌ 一致なし`);
             return null;
         }
 
-        // 電話番号正規化（+記号対応版）
+        // 電話番号正規化（修正版：+記号対応）
         function normalizePhone(phone) {
             if (!phone || phone === '0') return null;
             
-            // +記号、ハイフン、スペースを除去
+            // 1. 「+」記号、ハイフン、スペースを削除
             let normalized = phone.replace(/[+\-\s]/g, '');
             
+            // 2. 数字のみかチェック
             if (!/^\d+$/.test(normalized)) return null;
             
-            // +81で始まる国際番号の場合、81を0に変換
-            if (normalized.startsWith('81') && normalized.length === 12) {
+            // 3. 国際番号（81から始まる）の場合の処理
+            if (normalized.startsWith('81') && normalized.length >= 12) {
+                // 81を0に変換（例：819087923202 → 09087923202）
                 normalized = '0' + normalized.substring(2);
             }
             
-            // 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
+            // 4. 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
             if (normalized.length === 9 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
-            // 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
+            // 5. 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
             if (normalized.length === 10 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
-            // 11桁で先頭が0の場合はそのまま（携帯電話）
+            // 6. 11桁で先頭が0の場合はそのまま（携帯電話）
             if (normalized.length === 11 && normalized.startsWith('0')) {
                 return normalized;
             }
             
-            // 10桁で先頭が0の場合もそのまま（固定電話）
+            // 7. 10桁で先頭が0の場合もそのまま（固定電話）
             if (normalized.length === 10 && normalized.startsWith('0')) {
                 return normalized;
             }
