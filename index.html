@@ -101,77 +101,30 @@
             'その他': { code: 'Other', name: 'CUSTOM_CARRIER', method: 'CUSTOM_SHIPPING' }
         };
 
-        // 初期化（エラーハンドリング強化）
+        // 初期化
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM Content Loaded - 初期化開始');
+            console.log('修正版システム初期化開始');
             
-            try {
-                const txtUpload = document.getElementById('txt-upload');
-                const csvUpload = document.getElementById('csv-upload');
-                const processBtn = document.getElementById('process-btn');
-                const downloadBtn = document.getElementById('download-btn');
-                
-                console.log('要素確認:', {
-                    txtUpload: !!txtUpload,
-                    csvUpload: !!csvUpload,
-                    processBtn: !!processBtn,
-                    downloadBtn: !!downloadBtn
-                });
-                
-                if (txtUpload) {
-                    txtUpload.addEventListener('change', function(event) {
-                        console.log('TXTファイル変更イベント');
-                        handleTxtUpload(event);
-                    });
-                    console.log('TXTアップロードイベント設定完了');
-                }
-                
-                if (csvUpload) {
-                    csvUpload.addEventListener('change', function(event) {
-                        console.log('CSVファイル変更イベント');
-                        handleCsvUpload(event);
-                    });
-                    console.log('CSVアップロードイベント設定完了');
-                }
-                
-                if (processBtn) {
-                    processBtn.addEventListener('click', function(event) {
-                        console.log('処理ボタンクリック');
-                        event.preventDefault();
-                        processData();
-                    });
-                    console.log('処理ボタンイベント設定完了');
-                }
-                
-                if (downloadBtn) {
-                    downloadBtn.addEventListener('click', function(event) {
-                        console.log('ダウンロードボタンクリック');
-                        event.preventDefault();
-                        downloadTxt();
-                    });
-                    console.log('ダウンロードボタンイベント設定完了');
-                }
-                
-                console.log('初期化完了');
-            } catch (error) {
-                console.error('初期化エラー:', error);
-                alert('システム初期化に失敗しました: ' + error.message);
-            }
+            const txtUpload = document.getElementById('txt-upload');
+            const csvUpload = document.getElementById('csv-upload');
+            const processBtn = document.getElementById('process-btn');
+            const downloadBtn = document.getElementById('download-btn');
+            
+            if (txtUpload) txtUpload.addEventListener('change', handleTxtUpload);
+            if (csvUpload) csvUpload.addEventListener('change', handleCsvUpload);
+            if (processBtn) processBtn.addEventListener('click', processData);
+            if (downloadBtn) downloadBtn.addEventListener('click', downloadTxt);
+            
+            console.log('修正版システム初期化完了');
         });
 
-        // Amazon注文レポートファイルを読み込む（エラーハンドリング強化）
+        // Amazon注文レポートファイルを読み込む
         async function handleTxtUpload(event) {
-            console.log('TXT upload triggered');
             const file = event.target.files[0];
-            console.log('TXT file selected:', file ? file.name : 'none');
-            
             if (!file) return;
 
             try {
-                console.log('ファイル読み込み開始...');
                 const fileContent = await file.text();
-                console.log('ファイル内容取得完了, 長さ:', fileContent.length);
-                
                 const result = Papa.parse(fileContent, {
                     header: true,
                     skipEmptyLines: true,
@@ -179,24 +132,8 @@
                     encoding: 'UTF-8'
                 });
                 
-                console.log('Papa.parse完了:', {
-                    dataLength: result.data.length,
-                    errors: result.errors.length,
-                    meta: result.meta
-                });
-                
-                if (result.errors.length > 0) {
-                    console.warn('パース警告:', result.errors);
-                }
-                
-                amazonOrderData = result.data.filter(row => row['order-id']); // 空行除去
+                amazonOrderData = result.data;
                 console.log('注文レポートファイル読み込み完了:', amazonOrderData.length, '件');
-                
-                // データの列を確認
-                if (amazonOrderData.length > 0) {
-                    console.log('利用可能な列:', Object.keys(amazonOrderData[0]));
-                    console.log('データサンプル:', amazonOrderData[0]);
-                }
                 
                 checkProcessButtonState();
             } catch (error) {
@@ -232,33 +169,13 @@
             }
         }
 
-        // 処理ボタンの状態をチェック（強化版）
+        // 処理ボタンの状態をチェック
         function checkProcessButtonState() {
-            try {
-                const processBtn = document.getElementById('process-btn');
-                const hasOrderData = amazonOrderData.length > 0;
-                const hasTrackingData = trackingData.length > 0;
-                
-                console.log('ボタン状態チェック:', {
-                    hasOrderData,
-                    hasTrackingData,
-                    orderCount: amazonOrderData.length,
-                    trackingCount: trackingData.length
-                });
-                
-                if (processBtn) {
-                    processBtn.disabled = !(hasOrderData && hasTrackingData);
-                    console.log('処理ボタン状態:', processBtn.disabled ? '無効' : '有効');
-                    
-                    if (hasOrderData && hasTrackingData) {
-                        console.log('両ファイル読み込み完了 - ボタン有効化');
-                    }
-                } else {
-                    console.error('処理ボタンが見つかりません');
-                }
-            } catch (error) {
-                console.error('ボタン状態チェックエラー:', error);
-            }
+            const processBtn = document.getElementById('process-btn');
+            const hasOrderData = amazonOrderData.length > 0;
+            const hasTrackingData = trackingData.length > 0;
+            
+            processBtn.disabled = !(hasOrderData && hasTrackingData);
         }
 
         // データを処理して出荷通知ファイルを生成（修正版）
@@ -367,23 +284,20 @@
             return { phoneMap, nameAddressMap };
         }
 
-        // 追跡番号を検索（修正版：+記号対応）
+        // 追跡番号を検索
         function findTrackingNumber(order, trackingMap) {
-            // 1. 電話番号マッチング（buyer-phone-numberを使用）
+            // 電話番号マッチング
             const shipPhone = order['buyer-phone-number'];
             const normalizedShipPhone = normalizePhone(shipPhone);
             
-            console.log(`注文 ${order['order-id']}: buyer-phone-number="${shipPhone}" → normalized="${normalizedShipPhone}"`);
-            
             if (normalizedShipPhone && trackingMap.phoneMap[normalizedShipPhone]) {
-                console.log(`  ✅ 電話番号一致: ${normalizedShipPhone} → 追跡番号 ${trackingMap.phoneMap[normalizedShipPhone]}`);
                 return {
                     trackingNumber: trackingMap.phoneMap[normalizedShipPhone],
                     matchType: 'phone'
                 };
             }
             
-            // 2. 名前+住所マッチング
+            // 名前+住所マッチング
             const name = (order['recipient-name'] || '').trim();
             const address = normalizeAddress(
                 (order['ship-address-1'] || '') + 
@@ -391,63 +305,30 @@
                 (order['ship-city'] || '')
             );
             
-            console.log(`  受取人名: "${name}", 住所: "${address}"`);
-            
             if (name && address) {
                 const nameAddressKey = `${name}|${address}`;
                 if (trackingMap.nameAddressMap[nameAddressKey]) {
-                    console.log(`  ✅ 名前+住所一致: ${nameAddressKey} → 追跡番号 ${trackingMap.nameAddressMap[nameAddressKey]}`);
                     return {
                         trackingNumber: trackingMap.nameAddressMap[nameAddressKey],
                         matchType: 'name-address'
                     };
                 }
-                
-                // 3. あいまい一致
-                const fuzzyResult = fuzzyMatch(name, address, trackingMap.nameAddressMap);
-                if (fuzzyResult) {
-                    console.log(`  ⚠️ あいまい一致: → 追跡番号 ${fuzzyResult.trackingNumber}`);
-                    return fuzzyResult;
-                }
             }
             
-            console.log(`  ❌ 一致なし`);
             return null;
         }
 
-        // 電話番号正規化（修正版：+記号対応）
+        // 電話番号正規化（+記号除去のみ）
         function normalizePhone(phone) {
             if (!phone || phone === '0') return null;
             
-            // 1. 「+」記号、ハイフン、スペースを削除
+            // +記号、ハイフン、スペースを削除
             let normalized = phone.replace(/[+\-\s]/g, '');
             
-            // 2. 数字のみかチェック
             if (!/^\d+$/.test(normalized)) return null;
             
-            // 3. 国際番号（81から始まる）の場合の処理
-            if (normalized.startsWith('81') && normalized.length >= 12) {
-                // 81を0に変換（例：819087923202 → 09087923202）
-                normalized = '0' + normalized.substring(2);
-            }
-            
-            // 4. 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
-            if (normalized.length === 9 && !normalized.startsWith('0')) {
-                normalized = '0' + normalized;
-            }
-            
-            // 5. 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
-            if (normalized.length === 10 && !normalized.startsWith('0')) {
-                normalized = '0' + normalized;
-            }
-            
-            // 6. 11桁で先頭が0の場合はそのまま（携帯電話）
-            if (normalized.length === 11 && normalized.startsWith('0')) {
-                return normalized;
-            }
-            
-            // 7. 10桁で先頭が0の場合もそのまま（固定電話）
-            if (normalized.length === 10 && normalized.startsWith('0')) {
+            // 基本的な長さチェック（9-12桁程度を想定）
+            if (normalized.length >= 9 && normalized.length <= 12) {
                 return normalized;
             }
             
