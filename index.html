@@ -101,30 +101,77 @@
             'その他': { code: 'Other', name: 'CUSTOM_CARRIER', method: 'CUSTOM_SHIPPING' }
         };
 
-        // 初期化
+        // 初期化（エラーハンドリング強化）
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('修正版システム初期化開始');
+            console.log('DOM Content Loaded - 初期化開始');
             
-            const txtUpload = document.getElementById('txt-upload');
-            const csvUpload = document.getElementById('csv-upload');
-            const processBtn = document.getElementById('process-btn');
-            const downloadBtn = document.getElementById('download-btn');
-            
-            if (txtUpload) txtUpload.addEventListener('change', handleTxtUpload);
-            if (csvUpload) csvUpload.addEventListener('change', handleCsvUpload);
-            if (processBtn) processBtn.addEventListener('click', processData);
-            if (downloadBtn) downloadBtn.addEventListener('click', downloadTxt);
-            
-            console.log('修正版システム初期化完了');
+            try {
+                const txtUpload = document.getElementById('txt-upload');
+                const csvUpload = document.getElementById('csv-upload');
+                const processBtn = document.getElementById('process-btn');
+                const downloadBtn = document.getElementById('download-btn');
+                
+                console.log('要素確認:', {
+                    txtUpload: !!txtUpload,
+                    csvUpload: !!csvUpload,
+                    processBtn: !!processBtn,
+                    downloadBtn: !!downloadBtn
+                });
+                
+                if (txtUpload) {
+                    txtUpload.addEventListener('change', function(event) {
+                        console.log('TXTファイル変更イベント');
+                        handleTxtUpload(event);
+                    });
+                    console.log('TXTアップロードイベント設定完了');
+                }
+                
+                if (csvUpload) {
+                    csvUpload.addEventListener('change', function(event) {
+                        console.log('CSVファイル変更イベント');
+                        handleCsvUpload(event);
+                    });
+                    console.log('CSVアップロードイベント設定完了');
+                }
+                
+                if (processBtn) {
+                    processBtn.addEventListener('click', function(event) {
+                        console.log('処理ボタンクリック');
+                        event.preventDefault();
+                        processData();
+                    });
+                    console.log('処理ボタンイベント設定完了');
+                }
+                
+                if (downloadBtn) {
+                    downloadBtn.addEventListener('click', function(event) {
+                        console.log('ダウンロードボタンクリック');
+                        event.preventDefault();
+                        downloadTxt();
+                    });
+                    console.log('ダウンロードボタンイベント設定完了');
+                }
+                
+                console.log('初期化完了');
+            } catch (error) {
+                console.error('初期化エラー:', error);
+                alert('システム初期化に失敗しました: ' + error.message);
+            }
         });
 
-        // Amazon注文レポートファイルを読み込む
+        // Amazon注文レポートファイルを読み込む（エラーハンドリング強化）
         async function handleTxtUpload(event) {
+            console.log('TXT upload triggered');
             const file = event.target.files[0];
+            console.log('TXT file selected:', file ? file.name : 'none');
+            
             if (!file) return;
 
             try {
+                console.log('ファイル読み込み開始...');
                 const fileContent = await file.text();
+                console.log('ファイル内容取得完了, 長さ:', fileContent.length);
+                
                 const result = Papa.parse(fileContent, {
                     header: true,
                     skipEmptyLines: true,
@@ -132,8 +179,24 @@
                     encoding: 'UTF-8'
                 });
                 
-                amazonOrderData = result.data;
+                console.log('Papa.parse完了:', {
+                    dataLength: result.data.length,
+                    errors: result.errors.length,
+                    meta: result.meta
+                });
+                
+                if (result.errors.length > 0) {
+                    console.warn('パース警告:', result.errors);
+                }
+                
+                amazonOrderData = result.data.filter(row => row['order-id']); // 空行除去
                 console.log('注文レポートファイル読み込み完了:', amazonOrderData.length, '件');
+                
+                // データの列を確認
+                if (amazonOrderData.length > 0) {
+                    console.log('利用可能な列:', Object.keys(amazonOrderData[0]));
+                    console.log('データサンプル:', amazonOrderData[0]);
+                }
                 
                 checkProcessButtonState();
             } catch (error) {
@@ -169,13 +232,33 @@
             }
         }
 
-        // 処理ボタンの状態をチェック
+        // 処理ボタンの状態をチェック（強化版）
         function checkProcessButtonState() {
-            const processBtn = document.getElementById('process-btn');
-            const hasOrderData = amazonOrderData.length > 0;
-            const hasTrackingData = trackingData.length > 0;
-            
-            processBtn.disabled = !(hasOrderData && hasTrackingData);
+            try {
+                const processBtn = document.getElementById('process-btn');
+                const hasOrderData = amazonOrderData.length > 0;
+                const hasTrackingData = trackingData.length > 0;
+                
+                console.log('ボタン状態チェック:', {
+                    hasOrderData,
+                    hasTrackingData,
+                    orderCount: amazonOrderData.length,
+                    trackingCount: trackingData.length
+                });
+                
+                if (processBtn) {
+                    processBtn.disabled = !(hasOrderData && hasTrackingData);
+                    console.log('処理ボタン状態:', processBtn.disabled ? '無効' : '有効');
+                    
+                    if (hasOrderData && hasTrackingData) {
+                        console.log('両ファイル読み込み完了 - ボタン有効化');
+                    }
+                } else {
+                    console.error('処理ボタンが見つかりません');
+                }
+            } catch (error) {
+                console.error('ボタン状態チェックエラー:', error);
+            }
         }
 
         // データを処理して出荷通知ファイルを生成（修正版）
