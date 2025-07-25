@@ -265,11 +265,12 @@
                 const address2 = row[12] || '';
                 const name = row[15] || '';
                 
-                // 電話番号マップ
+                // 電話番号マップ（追跡データの電話番号も正規化）
                 if (phone && phone !== '0' && trackingNumber) {
                     const normalizedPhone = normalizePhone(phone);
                     if (normalizedPhone) {
                         phoneMap[normalizedPhone] = trackingNumber;
+                        console.log(`追跡データ電話番号マップ: "${phone}" → "${normalizedPhone}" → ${trackingNumber}`);
                     }
                 }
                 
@@ -281,6 +282,7 @@
                 }
             });
             
+            console.log('電話番号マップ:', phoneMap);
             return { phoneMap, nameAddressMap };
         }
 
@@ -318,7 +320,7 @@
             return null;
         }
 
-        // 電話番号正規化（+記号除去のみ）
+        // 電話番号正規化（両方のデータに対応）
         function normalizePhone(phone) {
             if (!phone || phone === '0') return null;
             
@@ -326,6 +328,11 @@
             let normalized = phone.replace(/[+\-\s]/g, '');
             
             if (!/^\d+$/.test(normalized)) return null;
+            
+            // 先頭の0を除去（0819087923202 → 819087923202）
+            if (normalized.startsWith('0') && normalized.length > 10) {
+                normalized = normalized.substring(1);
+            }
             
             // 基本的な長さチェック（9-12桁程度を想定）
             if (normalized.length >= 9 && normalized.length <= 12) {
