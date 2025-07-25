@@ -322,16 +322,15 @@
         function normalizePhone(phone) {
             if (!phone || phone === '0') return null;
             
-            // +記号、ハイフン、スペースを削除
+            // +記号、ハイフン、スペースを除去
             let normalized = phone.replace(/[+\-\s]/g, '');
             
-            // +81で始まる国際番号の場合、81を削除して0を追加
-            if (normalized.startsWith('81') && normalized.length === 13) {
+            if (!/^\d+$/.test(normalized)) return null;
+            
+            // +81で始まる国際番号の場合、81を0に変換
+            if (normalized.startsWith('81') && normalized.length === 12) {
                 normalized = '0' + normalized.substring(2);
             }
-            
-            // 数字のみかチェック
-            if (!/^\d+$/.test(normalized)) return null;
             
             // 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
             if (normalized.length === 9 && !normalized.startsWith('0')) {
