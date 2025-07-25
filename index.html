@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amazon出荷通知処理システム</title>
+    <title>Amazon出荷通知処理システム（修正版）</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -318,27 +318,42 @@
             return null;
         }
 
-        // 電話番号正規化
+        // 電話番号正規化（+記号対応版）
         function normalizePhone(phone) {
             if (!phone || phone === '0') return null;
             
-            let normalized = phone.replace(/[-\s]/g, '');
+            // +記号、ハイフン、スペースを削除
+            let normalized = phone.replace(/[+\-\s]/g, '');
             
+            // +81で始まる国際番号の場合、81を削除して0を追加
+            if (normalized.startsWith('81') && normalized.length === 13) {
+                normalized = '0' + normalized.substring(2);
+            }
+            
+            // 数字のみかチェック
             if (!/^\d+$/.test(normalized)) return null;
             
+            // 9桁の場合（固定電話の先頭0なし）→ 先頭に0を追加して10桁に
             if (normalized.length === 9 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
+            // 10桁の場合（携帯電話の先頭0なし）→ 先頭に0を追加して11桁に
             if (normalized.length === 10 && !normalized.startsWith('0')) {
                 normalized = '0' + normalized;
             }
             
-            if ((normalized.length === 11 && normalized.startsWith('0')) ||
-                (normalized.length === 10 && normalized.startsWith('0'))) {
+            // 11桁で先頭が0の場合はそのまま（携帯電話）
+            if (normalized.length === 11 && normalized.startsWith('0')) {
                 return normalized;
             }
             
+            // 10桁で先頭が0の場合もそのまま（固定電話）
+            if (normalized.length === 10 && normalized.startsWith('0')) {
+                return normalized;
+            }
+            
+            console.log(`電話番号正規化失敗: "${phone}" → "${normalized}" (${normalized.length}桁)`);
             return null;
         }
 
